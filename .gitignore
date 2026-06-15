@@ -27,6 +27,7 @@ htmlcov/
 # Backend generated/local runtime
 backend/.venv/
 backend/.venv*/
+backend/.local/
 backend/__pycache__/
 backend/.pytest_cache/
 backend/storage/

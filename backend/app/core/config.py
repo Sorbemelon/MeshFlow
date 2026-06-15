@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         default="development", alias="APP_ENV"
     )
     app_version: str = Field(default="0.1.0", alias="APP_VERSION")
-    debug: bool = Field(default=True, alias="DEBUG")
+    debug: bool = Field(default=True, alias="APP_DEBUG")
 
     # Metadata database only. This must not be used as an analytical engine.
     database_url: str = Field(
