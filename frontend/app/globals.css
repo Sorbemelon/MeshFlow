@@ -67,6 +67,18 @@ body {
   max-width: 70ch;
 }
 
+/*
+  Identity-only gradient text — used exactly once on the landing wordmark
+  ("Flow" in "MeshFlow"). DESIGN.md's gradient-text prohibition covers
+  decorative overuse; this is a deliberate single identity moment on a dark panel.
+*/
+.text-gradient-brand {
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
