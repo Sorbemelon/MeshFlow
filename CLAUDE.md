@@ -31,3 +31,12 @@ CrossHelix is installed in this repo. Use CrossHelix for this repo when repo evi
 
 Skip it for trivial edits, non-repo questions, already-visible one-file fixes, and tiny work where direct reading is cheaper. CrossHelix gives evidence; Claude Code still uses Read/Edit/Grep and project tests for live work. Convert the task into precise repo terms, and run `crosshelix reindex --full` if `crosshelix status` shows a missing or stale index before relying on `prepare`/`search`.
 <!-- END CROSSHELIX MANAGED BLOCK -->
+
+# Design Context
+
+Frontend design work is governed by two root docs (authored via the `impeccable` skill; derived from the approved Scopian frontend scope, not a source of truth themselves):
+
+- `PRODUCT.md` — register (`product`), users, purpose, brand personality (precise · trustworthy · modern), anti-references, design principles, accessibility (WCAG 2.2 AA).
+- `DESIGN.md` — visual system (Stitch format): "The Glass Pipeline" north star, dark-slate shell + white surfaces, indigo primary, functional status palette, Inter + JetBrains Mono, responsive motion. Tokens are normative. Sidecar: `.impeccable/design.json`.
+
+Read both before any frontend UI work. Canonical scope lives in `docs/scopian/sources/FRONTEND_UX_SCOPE.md` and `PRODUCT_SCOPE.md`.

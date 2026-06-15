@@ -15,6 +15,8 @@ sources:
   - ../../sources/SESSION_LIMITS_AND_NAVIGATION.md
   - ../../sources/SYSTEM_ARCHITECTURE.md
   - ../../sources/WAREHOUSE_DBT_EXECUTION.md
+  - ../../../../DESIGN.md
+  - ../../../../PRODUCT.md
 buffer:
   mode: all-approved-in-view
 tags:

@@ -58,3 +58,7 @@ Thumbs.db
 .audit_*/
 .claude/settings.local.json
 *.local.json
+
+# Impeccable
+DESIGN.md
+PRODUCT.md

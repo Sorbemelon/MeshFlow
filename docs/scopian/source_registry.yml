@@ -29,6 +29,12 @@ sources:
     content_hash: sha256:bd9d319a4be5fe83327f0c0dcfd7434acb0252b9d9cd5ad1e414216c5f5c81ae
     registered_at: 2026-06-15T15:20:52+07:00
     updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-design
+    path: DESIGN.md
+    status: active
+    content_hash: sha256:9c433b2fda9ab692012d369d87293e453aaad381438047b1135e99027ab9dc6e
+    registered_at: 2026-06-15T17:26:28+07:00
+    updated_at: 2026-06-15T17:26:28+07:00
   - id: SRC-frontend-ux-scope
     path: docs/scopian/sources/FRONTEND_UX_SCOPE.md
     status: active
@@ -47,6 +53,12 @@ sources:
     content_hash: sha256:4d579eb37606b6e47199338f365063140b5d7c6daa3a4d0d3712128f62157815
     registered_at: 2026-06-15T15:20:52+07:00
     updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-product
+    path: PRODUCT.md
+    status: active
+    content_hash: sha256:8e574e1b9aad45d736182911b035fff7b52c2152c2f9ffb0749f62dfea717ac8
+    registered_at: 2026-06-15T17:26:28+07:00
+    updated_at: 2026-06-15T17:26:28+07:00
   - id: SRC-product-scope
     path: docs/scopian/sources/PRODUCT_SCOPE.md
     status: active
