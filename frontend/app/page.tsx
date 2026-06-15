@@ -1,6 +1,10 @@
 import { Logo } from "@/components/brand/Logo";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import {
+  LANDING_DEMO_LIMIT_ITEMS,
+  LANDING_DEMO_LIMIT_NOTE,
+} from "@/lib/demoLimits";
 
 const iconProps = {
   width: 18,
@@ -80,15 +84,6 @@ const STEPS = [
   { n: "2", title: "Review schema", body: "Inspect columns before warehouse preparation starts." },
   { n: "3", title: "Transform with warehouse", body: "Staging, Intermediate, Dimensional Model, and Data Marts stay visible." },
   { n: "4", title: "Ask from prepared marts", body: "The AI Analytics Engineer works from real query output and evidence." },
-];
-
-const LIMITS = [
-  { count: "3 days", label: "anonymous session" },
-  { count: "1", label: "workspace" },
-  { count: "1x", label: "demo dataset" },
-  { count: "1 CSV", label: "uploaded file" },
-  { count: "10", label: "analysis runs" },
-  { count: "3", label: "charts/run" },
 ];
 
 const ARCH = [
@@ -323,7 +318,7 @@ export default function LandingPage() {
                   </h2>
                 </div>
                 <ul className="mt-3 grid gap-2 xl:grid-cols-2">
-                  {LIMITS.map((limit) => (
+                  {LANDING_DEMO_LIMIT_ITEMS.map((limit) => (
                     <li
                       key={`${limit.count}-${limit.label}`}
                       className="flex items-center gap-2 whitespace-nowrap rounded-md bg-white/75 px-2.5 py-1.5 text-[0.72rem] leading-none text-indigo-950 ring-1 ring-indigo-200/80"
@@ -335,6 +330,9 @@ export default function LandingPage() {
                     </li>
                   ))}
                 </ul>
+                <p className="mt-3 text-xs leading-relaxed text-indigo-950/75">
+                  {LANDING_DEMO_LIMIT_NOTE}
+                </p>
               </div>
             </div>
           </section>

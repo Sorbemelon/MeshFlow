@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { WordmarkOnDark } from "@/components/brand/Logo";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { cn } from "@/lib/cn";
+import { SIDEBAR_DEMO_USAGE_ITEMS } from "@/lib/demoLimits";
 
 type NavItem = {
   href: string;
@@ -84,12 +85,6 @@ const NAV: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const demoLimits = [
-    { count: "3 days", label: "Session" },
-    { count: "1", label: "Uploaded CSV" },
-    { count: "10", label: "Analysis runs" },
-    { count: "8", label: "Dashboard cards" },
-  ];
 
   return (
     <aside className="flex flex-col border-b border-shell-border bg-shell-deep text-slate-300 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
@@ -152,18 +147,22 @@ export function Sidebar() {
         <div className="mt-3 rounded-lg border border-shell-border bg-shell/55 p-3">
           <p className="text-xs font-semibold text-slate-300">Demo limits</p>
           <div className="mt-2 grid gap-1.5">
-            {demoLimits.map((limit) => (
+            {SIDEBAR_DEMO_USAGE_ITEMS.map((limit) => (
               <span
-                key={`${limit.count}-${limit.label}`}
+                key={`${limit.value}-${limit.label}`}
                 className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md bg-slate-800/80 px-2.5 py-1.5 text-[0.6875rem] font-medium text-slate-300 ring-1 ring-shell-border"
               >
                 {limit.label}
                 <span className="rounded-full bg-primary/25 px-2 py-0.5 text-center font-mono text-[0.625rem] font-semibold text-indigo-200">
-                  {limit.count}
+                  {limit.value}
                 </span>
               </span>
             ))}
           </div>
+          <p className="mt-2 text-[0.6875rem] leading-relaxed text-slate-500">
+            Usage appears here once the session API is connected. Delete/reset
+            does not restore used quota.
+          </p>
         </div>
         <button
           type="button"
