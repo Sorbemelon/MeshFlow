@@ -44,6 +44,7 @@ frontend/out/
 frontend/dist/
 frontend/.turbo/
 frontend/coverage/
+frontend/*.tsbuildinfo
 
 # OS/editor
 .DS_Store

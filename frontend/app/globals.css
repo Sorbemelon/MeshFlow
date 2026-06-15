@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/*
+  MeshFlow v2 design tokens — mirror of DESIGN.md frontmatter.
+  DESIGN.md is the normative source; keep these in sync.
+*/
+@theme {
+  /* Shell (dark slate console) */
+  --color-shell-deep: #0f172a;
+  --color-shell: #1e293b;
+  --color-shell-border: #334155;
+
+  /* Surfaces (light content) */
+  --color-surface: #ffffff;
+  --color-surface-muted: #f8fafc;
+  --color-border: #e2e8f0;
+
+  /* Ink (text on light) */
+  --color-ink: #0f172a;
+  --color-ink-soft: #334155;
+  --color-ink-muted: #64748b;
+
+  /* Primary — the one accent of intent (indigo) */
+  --color-primary: #4f46e5;
+  --color-primary-strong: #4338ca;
+  --color-primary-soft: #6366f1;
+  --color-primary-tint: #eef2ff;
+
+  /* Functional status palette (text-safe on white) */
+  --color-status-success: #059669;
+  --color-status-running: #2563eb;
+  --color-status-warning: #d97706;
+  --color-status-danger: #dc2626;
+  --color-status-neutral: #64748b;
+
+  /* Brand identity gradient — identity moments only, never UI chrome */
+  --color-brand-cyan: #38bdf8;
+  --color-brand-violet: #7c3aed;
+  --color-brand-core: #fb5a3c;
+
+  /* Radii */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Fonts (next/font variables set in layout.tsx) */
+  --font-sans: var(--font-inter), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Motion — responsive, ease-out, no bounce */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-surface-muted);
+  color: var(--color-ink-soft);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Body copy stays readable: cap measure where prose is rendered. */
+.prose-measure {
+  max-width: 70ch;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
