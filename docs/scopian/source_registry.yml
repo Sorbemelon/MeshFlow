@@ -1,0 +1,73 @@
+sources:
+  - id: SRC-ai-workflow
+    path: docs/scopian/sources/AI_WORKFLOW.md
+    status: active
+    content_hash: sha256:a77e00b72623804082c5830082e12ae7a5869335ce08af020990bc733c599734
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-api-contract
+    path: docs/scopian/sources/API_CONTRACT.md
+    status: active
+    content_hash: sha256:646d49cd4ba0bc4dfaf0f8cdffeff35d23608f7f973fe384587039f2541fe32b
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-build-phases
+    path: docs/scopian/sources/BUILD_PHASES.md
+    status: active
+    content_hash: sha256:3935d01c9073d8d70cdffbeb46fdfddcd8f57792ba818908ee7fa8317828cd28
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-data-model
+    path: docs/scopian/sources/DATA_MODEL.md
+    status: active
+    content_hash: sha256:26d16b387a119bafca06bea19be125d50c092414417087c9f4302ece90951649
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-data-selection-ux
+    path: docs/scopian/sources/DATA_SELECTION_UX.md
+    status: active
+    content_hash: sha256:bd9d319a4be5fe83327f0c0dcfd7434acb0252b9d9cd5ad1e414216c5f5c81ae
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-frontend-ux-scope
+    path: docs/scopian/sources/FRONTEND_UX_SCOPE.md
+    status: active
+    content_hash: sha256:9dbd222f45834907ce53736e8db78d5c82422bd9cd2d3169ef138ce03c7ee540
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-legacy-reference-rules
+    path: docs/scopian/sources/LEGACY_REFERENCE_RULES.md
+    status: active
+    content_hash: sha256:7cf570714a2d15c6df27933b1d4aee6f3f4ca4617ba46f0e3b3db649bbdb570d
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-maintenance-rules
+    path: docs/scopian/sources/MAINTENANCE_RULES.md
+    status: active
+    content_hash: sha256:4d579eb37606b6e47199338f365063140b5d7c6daa3a4d0d3712128f62157815
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-product-scope
+    path: docs/scopian/sources/PRODUCT_SCOPE.md
+    status: active
+    content_hash: sha256:2f6c4329924e8ed44689b29ba218c81fa8fe5f000f58a87b76f8d190eff5e214
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-session-limits-and-navigation
+    path: docs/scopian/sources/SESSION_LIMITS_AND_NAVIGATION.md
+    status: active
+    content_hash: sha256:ad9d058c588b09bb93402e5777e7e411d07cbba73775f52a884124afe8eab3fa
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-system-architecture
+    path: docs/scopian/sources/SYSTEM_ARCHITECTURE.md
+    status: active
+    content_hash: sha256:5c85a3a33fe5d0e42ce7e915cf7897ced7134d58d84baba1d74f31d35a8a4d41
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
+  - id: SRC-warehouse-dbt-execution
+    path: docs/scopian/sources/WAREHOUSE_DBT_EXECUTION.md
+    status: active
+    content_hash: sha256:b02c43a20d8f9ea10d73cb207442e04da879ce752caed3064feceb3413b72af7
+    registered_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-15T15:20:52+07:00
