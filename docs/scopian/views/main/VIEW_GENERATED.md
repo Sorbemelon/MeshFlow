@@ -2,7 +2,7 @@
 generated_by: scopian
 generator_schema: v0.2-B
 view: main
-generated_at: 2026-06-15T17:26:44+07:00
+generated_at: 2026-06-16T03:36:56+07:00
 non_canonical: true
 generated_mode: single
 canonical_inputs:
@@ -14,7 +14,7 @@ canonical_inputs:
 input_hashes:
   view: sha256:d8813ce52fd6
   sources: sha256:4a0593b28507
-  buffer: sha256:e3b0c44298fc
+  buffer: sha256:121182b3e658
   context: sha256:5ef45bc1a5d7
   registry: sha256:b41cce7544f0
 ---
@@ -31,7 +31,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - view: main
 - view_path: docs/scopian/views/main/VIEW.md
-- generated_at: 2026-06-15T17:26:44+07:00
+- generated_at: 2026-06-16T03:36:56+07:00
 
 ## Selected Sources
 
@@ -52,7 +52,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 ## Approved Buffer Summary
 
-- none
+- 2026-06-16T03:36:40+07:00 DEC-20260616-0336-user-demo-limit-correction-AW5Q: Title: Align analysis-run limit with dashboard-card limit Decision: MeshFlow v2 now uses 8 successful analysis runs and 8 dashboard card ... (docs/scopian/views/main/buffer/decisions/DEC-20260616-0336-user-demo-limit-correction-AW5Q.md)
 
 ## Scope Checklist
 
@@ -141,6 +141,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 | ITEM-decision-required-4-scopian-usage-fe55cd60 | decision_required | 4. Scopian usage | docs/scopian/sources/MAINTENANCE_RULES.md#4-scopian-usage | requires-decision | not_checked_in_generated_view |
 | ITEM-decision-required-5-preparation-ai-input-718ddbce | decision_required | 5. Preparation AI input | docs/scopian/sources/AI_WORKFLOW.md#5-preparation-ai-input | none | not_checked_in_generated_view |
 | ITEM-conflict-detected-7-dashboard-scope-abc7e517 | conflict_detected | 7. Dashboard scope | docs/scopian/sources/PRODUCT_SCOPE.md#7-dashboard-scope | none | not_checked_in_generated_view |
+| ITEM-conflict-detected-title-align-analysis-run-limit-w-d59598ea | conflict_detected | Title: Align analysis-run limit with dashboard-card limit Decision: MeshFlow v2 now uses 8 successful analysis runs and 8 dashboard card ... | docs/scopian/views/main/buffer/decisions/DEC-20260616-0336-user-demo-limit-correction-AW5Q.md | approved_buffer | not_checked_in_generated_view |
 
 ## Coverage Snapshot
 
@@ -148,7 +149,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 - allowed_with_limits: 49
 - likely_out_of_scope: 11
 - decision_required: 2
-- conflict_detected: 1
+- conflict_detected: 2
 - insufficient_evidence: 0
 
 ## PM Summary
@@ -161,15 +162,15 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 ## Changelog Snapshot
 
-- generated_refresh: 2026-06-15T17:26:44+07:00
+- generated_refresh: 2026-06-16T03:36:56+07:00
 - selected_sources: 14
-- approved_buffer_records: 0
+- approved_buffer_records: 1
 
 ## Freshness Metadata
 
 - view: sha256:d8813ce52fd6
 - sources: sha256:4a0593b28507
-- buffer: sha256:e3b0c44298fc
+- buffer: sha256:121182b3e658
 - context: sha256:5ef45bc1a5d7
 - registry: sha256:b41cce7544f0
 
