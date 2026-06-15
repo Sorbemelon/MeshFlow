@@ -27,7 +27,7 @@ export default function DashboardPage() {
           </svg>
         </span>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">
+          <h1 className="text-xl font-semibold text-ink">
             Dashboard
           </h1>
           <p className="mt-0.5 text-sm text-ink-muted">
@@ -89,8 +89,7 @@ export default function DashboardPage() {
           <textarea
             disabled={!hasReadyDataset}
             rows={3}
-            placeholder="Prepare a dataset to ask a question…"
-            className="mt-1.5 w-full resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink placeholder:text-ink-muted disabled:cursor-not-allowed disabled:bg-surface-muted"
+            className="mt-1.5 w-full resize-none rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink disabled:cursor-not-allowed disabled:bg-surface-muted"
           />
 
           <div className="mt-4">

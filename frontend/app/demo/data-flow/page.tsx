@@ -1,4 +1,3 @@
-import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/cn";
 
@@ -49,7 +48,7 @@ export default function DataFlowPage() {
           </svg>
         </span>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">
+          <h1 className="text-xl font-semibold text-ink">
             Data Flow
           </h1>
           <p className="mt-0.5 text-sm text-ink-muted">
@@ -58,32 +57,29 @@ export default function DataFlowPage() {
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
         {/* ── Left narrow rail ──────────────────────────────────────── */}
-        <aside className="space-y-5">
+        <aside className="self-start rounded-lg border border-border bg-surface p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]" style={{ borderTop: "4px solid #2563eb" }}>
           {/* Dataset selector */}
           <div>
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+            <h3 className="mb-2 text-xs font-semibold text-ink-muted">
               Dataset
-            </h2>
-            <div className="rounded-md border border-border bg-surface px-3 py-2.5 text-sm text-ink-muted">
-              No available dataset
-            </div>
-            <Button
-              href="/demo/upload"
-              variant="secondary"
-              size="sm"
-              className="mt-2 w-full"
+            </h3>
+            <select
+              disabled={!hasDataset}
+              defaultValue=""
+              aria-label="Select dataset"
+              className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm text-ink-muted disabled:cursor-not-allowed disabled:bg-surface-muted"
             >
-              Upload Dataset
-            </Button>
+              <option value="">No available dataset</option>
+            </select>
           </div>
 
           {/* Preparation status */}
-          <div>
-            <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          <div className="mt-5">
+            <h3 className="mb-2 text-xs font-semibold text-ink-muted">
               Preparation status
-            </h2>
+            </h3>
             <ol className="space-y-1.5">
               {PREP_STAGES.map((stage) => (
                 <li
@@ -94,8 +90,8 @@ export default function DataFlowPage() {
                     aria-hidden
                     className="h-2 w-2 shrink-0 rounded-full bg-status-neutral/35"
                   />
-                  <span className="text-sm text-ink-soft">{stage}</span>
-                  <span className="ml-auto text-xs text-ink-muted">
+                  <span className="whitespace-nowrap text-sm text-ink-soft">{stage}</span>
+                  <span className="ml-auto whitespace-nowrap text-xs text-ink-muted">
                     Not Started
                   </span>
                 </li>

@@ -39,7 +39,7 @@ export default function UploadPage() {
           </svg>
         </span>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">
+          <h1 className="text-xl font-semibold text-ink">
             Upload Dataset
           </h1>
           <p className="mt-0.5 text-sm text-ink-muted">
@@ -124,7 +124,7 @@ export default function UploadPage() {
           <p className="mt-3 text-xs text-ink-muted">
             MeshFlow validates the CSV and checks S3 + Snowflake readiness
             before any data is sent. Invalid or unsupported files are rejected
-            with a clear reason — no partial or fake success.
+            with a clear reason — no partial or invented success.
           </p>
         </div>
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 
 // Columns each history row will carry (FRONTEND_UX_SCOPE §9).
-// Headers visible now; rows arrive in Phase 8. No fake entries.
+// Headers visible now; rows arrive in Phase 8. No rows are fabricated.
 const COLUMNS = [
   "Question",
   "Dataset",
@@ -34,16 +34,16 @@ export default function HistoryPage() {
 
   return (
     <div className="px-6 py-8">
-      {/* Page header with purple icon */}
+      {/* Page header with emerald icon */}
       <header className="mb-6 flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-500/12 text-purple-600">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/12 text-emerald-600">
           <svg {...ip}>
             <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
             <path d="M3 4v4h4M12 8v4l3 2" />
           </svg>
         </span>
         <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">
+          <h1 className="text-xl font-semibold text-ink">
             History
           </h1>
           <p className="mt-0.5 text-sm text-ink-muted">
@@ -53,10 +53,10 @@ export default function HistoryPage() {
         </div>
       </header>
 
-      {/* History table with violet top accent */}
+      {/* History table with emerald accent */}
       <div
         className="overflow-hidden rounded-lg border border-border bg-surface"
-        style={{ borderTop: "4px solid #7c3aed" }}
+        style={{ borderTop: "4px solid #059669" }}
       >
         {/* Column headers */}
         <div className="hidden grid-cols-9 gap-3 border-b border-border bg-surface-muted px-4 py-2.5 text-xs font-semibold text-ink-muted md:grid">
@@ -67,7 +67,7 @@ export default function HistoryPage() {
 
         {/* Empty state */}
         <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-50 text-purple-500">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
             <svg {...ip}>
               <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
               <path d="M3 4v4h4M12 8v4l3 2" />
@@ -102,7 +102,7 @@ export default function HistoryPage() {
         aria-hidden={!drawerOpen}
       >
         <div
-          className="absolute inset-0 bg-shell-deep/40"
+          className="absolute inset-0 cursor-pointer bg-shell-deep/40"
           onClick={() => setDrawerOpen(false)}
         />
         <aside

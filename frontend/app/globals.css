@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
-  MeshFlow v2 design tokens — mirror of DESIGN.md frontmatter.
+  MeshFlow design tokens — mirror of DESIGN.md frontmatter.
   DESIGN.md is the normative source; keep these in sync.
 */
 @theme {
@@ -62,15 +62,23 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+a[href],
+button:not(:disabled),
+select:not(:disabled),
+summary,
+[role="button"]:not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
 /* Body copy stays readable: cap measure where prose is rendered. */
 .prose-measure {
   max-width: 70ch;
 }
 
 /*
-  Identity-only gradient text — used exactly once on the landing wordmark
-  ("Flow" in "MeshFlow"). DESIGN.md's gradient-text prohibition covers
-  decorative overuse; this is a deliberate single identity moment on a dark panel.
+  Identity-only gradient text — used on the landing hero "Flow" wordmark text.
+  DESIGN.md's gradient-text prohibition covers decorative overuse; these are
+  deliberate brand identity moments on the landing surface.
 */
 .text-gradient-brand {
   background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);

@@ -71,8 +71,8 @@ const NAV: NavItem[] = [
   {
     href: "/demo/history",
     label: "History",
-    chipBg: "bg-purple-500/20",
-    chipColor: "text-purple-400",
+    chipBg: "bg-emerald-500/20",
+    chipColor: "text-emerald-400",
     icon: (
       <svg {...ip}>
         <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
@@ -84,15 +84,24 @@ const NAV: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const demoLimits = [
+    { count: "3 days", label: "Session" },
+    { count: "1", label: "Uploaded CSV" },
+    { count: "10", label: "Analysis runs" },
+    { count: "8", label: "Dashboard cards" },
+  ];
 
   return (
     <aside className="flex flex-col border-b border-shell-border bg-shell-deep text-slate-300 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
       {/* Brand */}
       <div className="px-4 pb-3 pt-4">
         <Link href="/" className="inline-flex" aria-label="MeshFlow home">
-          <WordmarkOnDark />
+          <WordmarkOnDark
+            size={60}
+            textClassName="text-[1.75rem] leading-none"
+          />
         </Link>
-        <p className="mt-3 hidden text-[10px] font-semibold uppercase tracking-widest text-slate-500 md:block">
+        <p className="mt-4 hidden text-sm font-semibold text-slate-300 md:block">
           Workspace
         </p>
       </div>
@@ -139,6 +148,22 @@ export function Sidebar() {
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-slate-400">Session</span>
           <StatusBadge status="waiting" label="No session" />
+        </div>
+        <div className="mt-3 rounded-lg border border-shell-border bg-shell/55 p-3">
+          <p className="text-xs font-semibold text-slate-300">Demo limits</p>
+          <div className="mt-2 grid gap-1.5">
+            {demoLimits.map((limit) => (
+              <span
+                key={`${limit.count}-${limit.label}`}
+                className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md bg-slate-800/80 px-2.5 py-1.5 text-[0.6875rem] font-medium text-slate-300 ring-1 ring-shell-border"
+              >
+                {limit.label}
+                <span className="rounded-full bg-primary/25 px-2 py-0.5 text-center font-mono text-[0.625rem] font-semibold text-indigo-200">
+                  {limit.count}
+                </span>
+              </span>
+            ))}
+          </div>
         </div>
         <button
           type="button"

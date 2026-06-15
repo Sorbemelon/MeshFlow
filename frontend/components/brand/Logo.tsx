@@ -50,12 +50,24 @@ export function Logo({
  * Icon + white wordmark, for use on the dark slate shell where the
  * dark-ink PNG wordmark would be invisible.
  */
-export function WordmarkOnDark({ size = 30 }: { size?: number }) {
+export function WordmarkOnDark({
+  size = 30,
+  textClassName,
+}: {
+  size?: number;
+  textClassName?: string;
+}) {
   return (
     <span className="inline-flex items-center gap-2.5">
       <Logo variant="icon" size={size} priority />
-      <span className="text-[1.05rem] font-semibold tracking-tight text-white">
-        MeshFlow
+      <span
+        className={cn(
+          "font-semibold tracking-tight",
+          textClassName ?? "text-[1.05rem]",
+        )}
+      >
+        <span className="text-white">Mesh</span>
+        <span className="text-white">Flow</span>
       </span>
     </span>
   );
