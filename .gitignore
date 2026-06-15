@@ -1,0 +1,51 @@
+# Local AI/project-operation files - do not track
+/docs/prompts/
+/docs/progress/
+/docs/audit/
+
+# Local reference repos and snapshots - do not track
+/_reference/
+/reference/
+/legacy_reference/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+.venv*/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Backend generated/local runtime
+backend/.venv/
+backend/.venv*/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/storage/
+backend/tmp/
+backend/generated/
+backend/dbt_packages/
+backend/target/
+backend/logs/
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/.turbo/
+frontend/coverage/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
