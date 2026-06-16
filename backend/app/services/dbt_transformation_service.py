@@ -65,6 +65,17 @@ RAW_RETAIL_MODELS = {
         "mart_store_performance",
     ],
 }
+GENERIC_UPLOADED_MODELS = {
+    "staging": ["stg_uploaded"],
+    "intermediate": ["int_uploaded_enriched"],
+    "dimensional_model": ["fact_uploaded_records"],
+    "data_marts": ["mart_uploaded_overview"],
+}
+KNOWN_DBT_MODEL_TABLES = {
+    model_name
+    for model_group in [*RAW_RETAIL_MODELS.values(), *GENERIC_UPLOADED_MODELS.values()]
+    for model_name in model_group
+}
 
 
 class DbtExecutionError(Exception):
@@ -399,6 +410,8 @@ def run_dbt_commands(
     config: Settings = settings,
 ) -> dict[str, object]:
     dbt = _dbt_executable()
+    project_dir = project_dir.resolve()
+    profiles_dir = profiles_dir.resolve()
     common_args = [
         "--project-dir",
         str(project_dir),
@@ -541,6 +554,7 @@ select
   order_line_id,
   order_id,
   order_date,
+  date_trunc('month', order_date)::date as order_month,
   customer_id,
   product_id,
   store_id,
@@ -598,12 +612,7 @@ group by 1, 2
 
 
 def _generic_models(mappings: list[SemanticMapping]) -> dict[str, list[str]]:
-    return {
-        "staging": ["stg_uploaded"],
-        "intermediate": ["int_uploaded_enriched"],
-        "dimensional_model": ["fact_uploaded_records"],
-        "data_marts": ["mart_uploaded_overview"],
-    }
+    return GENERIC_UPLOADED_MODELS
 
 
 def _generic_sql(dataset: Dataset, mappings: list[SemanticMapping]) -> dict[str, str]:
@@ -1015,3 +1024,39 @@ def cleanup_dataset_runtime_artifacts(
         )
 
     return CleanupOperationResult(status="completed")
+
+
+def cleanup_dataset_model_tables(
+    *,
+    dataset: Dataset,
+    config: Settings = settings,
+) -> CleanupOperationResult:
+    model_names: set[str] = set()
+    for run in dataset.transformation_runs:
+        summary = run.dbt_run_summary_json or {}
+        models = summary.get("models")
+        if not isinstance(models, dict):
+            continue
+        for layer_models in models.values():
+            if not isinstance(layer_models, list):
+                continue
+            model_names.update(str(model_name) for model_name in layer_models)
+
+    if not model_names:
+        return CleanupOperationResult(status="skipped")
+
+    unexpected = sorted(model_names - KNOWN_DBT_MODEL_TABLES)
+    unsafe = sorted(model_name for model_name in model_names if not SAFE_NAME_RE.fullmatch(model_name))
+    if unexpected or unsafe:
+        return CleanupOperationResult(
+            status="failed",
+            warning=(
+                "Snowflake dbt model cleanup skipped because the model list included "
+                "unexpected or unsafe names."
+            ),
+        )
+
+    return snowflake_service.drop_tables_for_cleanup(
+        table_names=sorted(model_names),
+        config=config,
+    )

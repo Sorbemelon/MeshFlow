@@ -1,7 +1,10 @@
+from subprocess import CompletedProcess
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.services import dbt_transformation_service
 from app.models.dataset import (
     ColumnProfile,
     DataFlowEdge,
@@ -170,6 +173,44 @@ def patch_transform_dependencies(monkeypatch, *, fail: bool = False) -> None:
         }
 
     monkeypatch.setattr("app.services.dbt_transformation_service.run_dbt_commands", run_dbt)
+
+
+def test_run_dbt_commands_uses_resolved_project_and_profiles_paths(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    project_dir = tmp_path / "dbt_project"
+    profiles_dir = project_dir / "profiles"
+    profiles_dir.mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(dbt_transformation_service, "_dbt_executable", lambda: "dbt")
+    calls = []
+
+    def fake_run(args, cwd, **_kwargs):
+        calls.append((args, cwd))
+        return CompletedProcess(args=args, returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(dbt_transformation_service.subprocess, "run", fake_run)
+
+    dbt_transformation_service.run_dbt_commands(
+        project_dir=project_dir.relative_to(tmp_path),
+        profiles_dir=profiles_dir.relative_to(tmp_path),
+        target_name="dev",
+    )
+
+    assert calls
+    for args, cwd in calls:
+        assert cwd == project_dir.resolve()
+        assert args[args.index("--project-dir") + 1] == str(project_dir.resolve())
+        assert args[args.index("--profiles-dir") + 1] == str(profiles_dir.resolve())
+
+
+def test_raw_retail_fact_sales_exposes_order_month_for_sales_mart() -> None:
+    sql_files = dbt_transformation_service._retail_sql('"RAW_UPLOAD_TEST"')
+
+    assert "date_trunc('month', order_date)::date as order_month" in sql_files[
+        "models/dimensional/fact_sales.sql"
+    ]
 
 
 def test_transform_requires_session_header(client: TestClient) -> None:

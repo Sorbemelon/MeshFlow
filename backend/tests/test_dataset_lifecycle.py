@@ -201,6 +201,11 @@ def test_delete_dataset_soft_deletes_and_excludes_active_workspace(
         "cleanup_dataset_runtime_artifacts",
         lambda **_kwargs: dbt_transformation_service.CleanupOperationResult(status="completed"),
     )
+    monkeypatch.setattr(
+        dbt_transformation_service,
+        "cleanup_dataset_model_tables",
+        lambda **_kwargs: dbt_transformation_service.CleanupOperationResult(status="completed"),
+    )
     session_id = create_session(client)
     dataset = create_dataset(db_session, session_id)
 
@@ -286,6 +291,43 @@ def test_delete_dataset_does_not_decrement_usage(
     assert limits["usage"]["uploaded_datasets_used"] == 1
     assert limits["usage"]["successful_analysis_runs_used"] == 3
     assert limits["usage"]["dashboard_cards_used"] == 2
+
+
+def test_cleanup_dataset_external_resources_drops_recorded_dbt_model_tables(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    dropped_models: list[str] = []
+    monkeypatch.setattr(
+        storage_service,
+        "delete_s3_object_for_cleanup",
+        lambda **_kwargs: storage_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        snowflake_service,
+        "drop_raw_table_for_cleanup",
+        lambda **_kwargs: snowflake_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        snowflake_service,
+        "drop_tables_for_cleanup",
+        lambda table_names, **_kwargs: dropped_models.extend(table_names)
+        or snowflake_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        dbt_transformation_service,
+        "cleanup_dataset_runtime_artifacts",
+        lambda **_kwargs: dbt_transformation_service.CleanupOperationResult(status="completed"),
+    )
+    session_id = create_session(client)
+    dataset = create_dataset(db_session, session_id)
+
+    cleanup = cleanup_dataset_external_resources(dataset)
+
+    assert cleanup.snowflake == "completed"
+    assert cleanup.warnings == []
+    assert dropped_models == ["mart_sales_performance"]
 
 
 def test_deleted_dataset_blocks_semantic_transform_and_new_analysis(
@@ -438,6 +480,12 @@ def test_expired_session_cleanup_marks_workspace_metadata_deleted(
     )
     monkeypatch.setattr(
         dbt_transformation_service,
+        "cleanup_dataset_model_tables",
+        lambda **_kwargs: calls.append("dbt_models")
+        or dbt_transformation_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        dbt_transformation_service,
         "cleanup_dataset_runtime_artifacts",
         lambda **_kwargs: calls.append("dbt")
         or dbt_transformation_service.CleanupOperationResult(status="completed"),
@@ -456,7 +504,7 @@ def test_expired_session_cleanup_marks_workspace_metadata_deleted(
     expired_count = mark_expired_sessions(db_session, now)
 
     assert expired_count == 1
-    assert calls == ["s3", "snowflake", "dbt"]
+    assert calls == ["s3", "snowflake", "dbt_models", "dbt"]
     db_session.expire_all()
     assert db_session.get(DemoSession, session.id).status == "expired"
     assert db_session.get(Dataset, dataset.id).status == "deleted"

@@ -70,14 +70,23 @@ def cleanup_dataset_external_resources(
         raw_table_name=dataset.raw_table_name,
         config=config,
     )
+    dbt_model_result = dbt_transformation_service.cleanup_dataset_model_tables(
+        dataset=dataset,
+        config=config,
+    )
     dbt_result = dbt_transformation_service.cleanup_dataset_runtime_artifacts(
         dataset_id=dataset.id,
         config=config,
     )
-    warnings = _warning_list(s3_result.warning, snowflake_result.warning, dbt_result.warning)
+    warnings = _warning_list(
+        s3_result.warning,
+        snowflake_result.warning,
+        dbt_model_result.warning,
+        dbt_result.warning,
+    )
     return CleanupSummary(
         s3=s3_result.status,
-        snowflake=snowflake_result.status,
+        snowflake=_merge_status(snowflake_result.status, dbt_model_result.status),
         dbt_runtime=dbt_result.status,
         warnings=warnings,
     )

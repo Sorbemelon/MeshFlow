@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Iterable
 
 from app.core.config import Settings, settings
 
@@ -133,6 +133,18 @@ def check_connection_and_stage(config: Settings = settings) -> None:
                 raise SnowflakeServiceError(
                     "Snowflake stage was not found or the configured role lacks access."
                 )
+            stage_columns = [
+                str(column[0]).lower()
+                for column in (getattr(cursor, "description", None) or [])
+            ]
+            stage_url = ""
+            if "url" in stage_columns:
+                url_index = stage_columns.index("url")
+                stage_url = str(stages[0][url_index] or "")
+            if not stage_url.lower().startswith("s3://"):
+                raise SnowflakeServiceError(
+                    "Snowflake stage was found, but it is not an external S3 stage."
+                )
 
             try:
                 cursor.execute(f"DESC STAGE {_quote_qualified_name(config.snowflake_stage_name)}")
@@ -184,8 +196,15 @@ def create_and_load_raw_table(
             cursor.execute(f"SELECT COUNT(*) FROM {quoted_table}")
             row = cursor.fetchone()
             rows_loaded = int(row[0] if row else 0)
+            if rows_loaded <= 0:
+                cursor.execute(f"DROP TABLE IF EXISTS {quoted_table}")
+                raise SnowflakeServiceError(
+                    "Snowflake raw load completed but loaded zero rows."
+                )
         finally:
             cursor.close()
+    except SnowflakeServiceError:
+        raise
     except Exception as exc:
         raise SnowflakeServiceError("Snowflake raw load failed.") from exc
     finally:
@@ -288,6 +307,52 @@ def drop_raw_table_for_cleanup(
             status="failed",
             warning=(
                 f"Snowflake cleanup failed for raw table {raw_table_name}: "
+                f"{exc.__class__.__name__}."
+            ),
+        )
+    finally:
+        if connection is not None:
+            connection.close()
+
+    return CleanupOperationResult(status="completed")
+
+
+def drop_tables_for_cleanup(
+    *,
+    table_names: Iterable[str],
+    config: Settings = settings,
+) -> CleanupOperationResult:
+    names = list(dict.fromkeys(table_names))
+    if not names:
+        return CleanupOperationResult(status="skipped")
+    if not (
+        config.snowflake_account
+        and config.snowflake_user
+        and config.snowflake_password
+        and config.snowflake_warehouse
+        and config.snowflake_database
+        and config.snowflake_schema
+    ):
+        return CleanupOperationResult(
+            status="not_configured",
+            warning="Snowflake cleanup skipped because Snowflake is not fully configured.",
+        )
+
+    connection = None
+    try:
+        quoted_names = [_quote_identifier(name) for name in names]
+        connection = _connect(config)
+        cursor = connection.cursor()
+        try:
+            for quoted_name in quoted_names:
+                cursor.execute(f"DROP TABLE IF EXISTS {quoted_name}")
+        finally:
+            cursor.close()
+    except Exception as exc:
+        return CleanupOperationResult(
+            status="failed",
+            warning=(
+                "Snowflake cleanup failed for dbt model tables: "
                 f"{exc.__class__.__name__}."
             ),
         )
