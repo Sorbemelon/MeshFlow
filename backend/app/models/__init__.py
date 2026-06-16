@@ -1,5 +1,6 @@
 from app.models.dataset import (
     AiProviderRun,
+    AnalysisRun,
     ColumnProfile,
     DataFlowEdge,
     DataFlowNode,
@@ -14,6 +15,7 @@ from app.models.demo_session import DemoSession
 
 __all__ = [
     "AiProviderRun",
+    "AnalysisRun",
     "ColumnProfile",
     "DataFlowEdge",
     "DataFlowNode",

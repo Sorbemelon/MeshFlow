@@ -37,6 +37,10 @@ def generate_provider_run_id() -> str:
     return f"ai_run_{uuid4().hex}"
 
 
+def generate_analysis_run_id() -> str:
+    return f"an_run_{uuid4().hex}"
+
+
 def generate_transformation_run_id() -> str:
     return f"tf_run_{uuid4().hex}"
 
@@ -110,6 +114,11 @@ class Dataset(Base):
         back_populates="dataset",
         cascade="all, delete-orphan",
         order_by="AiProviderRun.created_at",
+    )
+    analysis_runs: Mapped[list[AnalysisRun]] = relationship(
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        order_by="AnalysisRun.created_at",
     )
     transformation_runs: Mapped[list[DatasetTransformationRun]] = relationship(
         back_populates="dataset",
@@ -281,6 +290,72 @@ class DatasetQuestionSuggestion(Base):
     dataset: Mapped[Dataset] = relationship(back_populates="question_suggestions")
 
 
+class AnalysisRun(Base):
+    __tablename__ = "analysis_runs"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_analysis_run_id,
+    )
+    demo_session_id: Mapped[str] = mapped_column(
+        ForeignKey("demo_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question: Mapped[str] = mapped_column(String(512), nullable=False)
+    normalized_question: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    decision_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    intent: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    source_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    grain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    metrics_json: Mapped[list[dict[str, object]] | None] = mapped_column(JSON, nullable=True)
+    dimensions_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    filters_json: Mapped[list[dict[str, object]] | None] = mapped_column(JSON, nullable=True)
+    generated_sql: Mapped[str | None] = mapped_column(Text, nullable=True)
+    output_schema_json: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    preview_rows_json: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    failed_step: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    provider_chain_json: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    dataset: Mapped[Dataset] = relationship(back_populates="analysis_runs")
+    provider_runs: Mapped[list[AiProviderRun]] = relationship(
+        back_populates="analysis_run",
+        cascade="all, delete-orphan",
+        order_by="AiProviderRun.created_at",
+    )
+
+
 class AiProviderRun(Base):
     __tablename__ = "ai_provider_runs"
 
@@ -291,6 +366,11 @@ class AiProviderRun(Base):
     )
     dataset_id: Mapped[str | None] = mapped_column(
         ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    analysis_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
     )
@@ -309,6 +389,7 @@ class AiProviderRun(Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     dataset: Mapped[Dataset | None] = relationship(back_populates="provider_runs")
+    analysis_run: Mapped[AnalysisRun | None] = relationship(back_populates="provider_runs")
 
 
 class DatasetTransformationRun(Base):

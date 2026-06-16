@@ -1,8 +1,9 @@
 from fastapi import APIRouter
 
-from app.api.v1 import datasets, demo_sessions, health, limits, workspace
+from app.api.v1 import analysis_runs, datasets, demo_sessions, health, limits, workspace
 
 api_router = APIRouter()
+api_router.include_router(analysis_runs.router, prefix="/analysis-runs", tags=["analysis-runs"])
 api_router.include_router(datasets.router, prefix="/datasets", tags=["datasets"])
 api_router.include_router(demo_sessions.router, prefix="/demo-sessions", tags=["demo-sessions"])
 api_router.include_router(health.router, prefix="/health", tags=["health"])

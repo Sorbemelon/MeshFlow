@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Any
 
 from app.core.config import Settings, settings
 
@@ -14,6 +17,13 @@ class SnowflakeServiceError(Exception):
 class SnowflakeLoadResult:
     raw_table_name: str
     rows_loaded: int
+
+
+@dataclass
+class SnowflakeQueryResult:
+    output_schema: list[dict[str, Any]]
+    preview_rows: list[dict[str, Any]]
+    row_count: int
 
 
 def raw_table_name_for_dataset(dataset_id: str) -> str:
@@ -33,6 +43,10 @@ def quote_identifier(value: str) -> str:
 
 def _quote_qualified_name(value: str) -> str:
     return ".".join(_quote_identifier(part.strip()) for part in value.split(".") if part.strip())
+
+
+def quote_qualified_name(value: str) -> str:
+    return _quote_qualified_name(value)
 
 
 def _connect(config: Settings = settings):
@@ -121,3 +135,56 @@ def create_and_load_raw_table(
         connection.close()
 
     return SnowflakeLoadResult(raw_table_name=raw_table_name, rows_loaded=rows_loaded)
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+def execute_analysis_query(
+    *,
+    sql: str,
+    preview_limit: int = 100,
+    config: Settings = settings,
+) -> SnowflakeQueryResult:
+    if not sql.lstrip().upper().startswith("SELECT"):
+        raise SnowflakeServiceError("Only SELECT analysis queries are allowed.")
+
+    connection = _connect(config)
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(sql)
+            description = cursor.description or []
+            column_names = [str(column[0]) for column in description]
+            output_schema = [
+                {
+                    "name": str(column[0]),
+                    "type": str(column[1]) if len(column) > 1 else "unknown",
+                }
+                for column in description
+            ]
+            rows = cursor.fetchmany(preview_limit)
+            preview_rows = [
+                {
+                    column_name: _json_safe(value)
+                    for column_name, value in zip(column_names, row, strict=False)
+                }
+                for row in rows
+            ]
+        finally:
+            cursor.close()
+    except Exception as exc:
+        raise SnowflakeServiceError("Snowflake analysis query failed.") from exc
+    finally:
+        connection.close()
+
+    return SnowflakeQueryResult(
+        output_schema=output_schema,
+        preview_rows=preview_rows,
+        row_count=len(preview_rows),
+    )

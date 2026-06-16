@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, settings
 from app.core.errors import AppError
-from app.models.dataset import Dataset
+from app.models.dataset import AnalysisRun, Dataset
 from app.models.demo_session import DemoSession
 from app.schemas.dataset import DatasetSummary
 from app.schemas.demo_session import (
@@ -89,6 +89,22 @@ def dataset_summary(dataset: Dataset) -> DatasetSummary:
         raw_table_name=dataset.raw_table_name,
         created_at=dataset.created_at.isoformat(),
     )
+
+
+def analysis_history_summary(run: AnalysisRun) -> dict[str, object]:
+    return {
+        "id": run.id,
+        "dataset_id": run.dataset_id,
+        "question": run.question,
+        "status": run.status,
+        "decision_type": run.decision_type,
+        "source_model": run.source_model,
+        "row_count": run.row_count,
+        "error_code": run.error_code,
+        "failed_step": run.failed_step,
+        "created_at": run.created_at.isoformat(),
+        "completed_at": run.completed_at.isoformat() if run.completed_at else None,
+    }
 
 
 def mark_expired_sessions(db: Session, now: datetime | None = None) -> int:
@@ -270,6 +286,12 @@ def get_workspace_response(
     ready_datasets = [
         dataset for dataset in datasets if dataset.status == "ready_for_analysis"
     ]
+    analysis_runs = db.scalars(
+        select(AnalysisRun)
+        .where(AnalysisRun.demo_session_id == session.id)
+        .order_by(AnalysisRun.created_at.desc())
+        .limit(10)
+    ).all()
 
     return WorkspaceResponse(
         session=summary_from_session(session, config),
@@ -283,7 +305,7 @@ def get_workspace_response(
             cards_limit=limits.max_dashboard_cards_per_session,
         ),
         history=HistorySummary(
-            analysis_runs=[],
+            analysis_runs=[analysis_history_summary(run) for run in analysis_runs],
             successful_analysis_runs_used=usage.successful_analysis_runs_used,
             successful_analysis_runs_limit=(
                 limits.max_successful_analysis_runs_per_session
