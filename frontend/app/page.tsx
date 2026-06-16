@@ -1,6 +1,9 @@
 import { Logo } from "@/components/brand/Logo";
-import { Button } from "@/components/ui/Button";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import {
+  LandingDemoAction,
+  LandingSessionProvider,
+  LandingStatusBadges,
+} from "@/components/landing/LandingSessionControls";
 import {
   LANDING_DEMO_LIMIT_ITEMS,
   LANDING_DEMO_LIMIT_NOTE,
@@ -179,7 +182,8 @@ const TECH = ["Next.js", "TypeScript", "FastAPI", "Snowflake", "dbt", "AWS S3", 
 
 export default function LandingPage() {
   return (
-    <main className="min-h-screen bg-shell-deep lg:min-h-dvh">
+    <LandingSessionProvider>
+      <main className="min-h-screen bg-shell-deep lg:min-h-dvh">
       <header className="flex h-12 items-center justify-between gap-4 border-b border-shell-border bg-linear-to-r from-shell-deep via-[#1e1b4b] to-shell-deep px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Logo variant="icon" size={30} priority />
@@ -192,14 +196,7 @@ export default function LandingPage() {
           </span>
         </div>
         <div className="flex items-center justify-end gap-2">
-          <span className="hidden items-center gap-1.5 rounded-full border border-shell-border bg-shell/55 px-2.5 py-1 sm:inline-flex">
-            <span className="text-xs font-medium text-slate-300">Demo</span>
-            <StatusBadge status="waiting" label="No session" className="bg-slate-700/80 text-slate-200" />
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-shell-border bg-shell/55 px-2.5 py-1">
-            <span className="text-xs font-medium text-slate-300">Backend</span>
-            <StatusBadge status="review" label="Not connected" className="bg-amber-500/15 text-amber-200" />
-          </span>
+          <LandingStatusBadges />
         </div>
       </header>
 
@@ -252,18 +249,8 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-                <Button href="/demo/upload">
-                  <svg {...iconProps} width={17} height={17}>
-                    <path d="M5 5.5A2.5 2.5 0 0 1 7.5 3h4.8a2 2 0 0 1 1.4.6L19.4 9a2 2 0 0 1 .6 1.4v6.1a2.5 2.5 0 0 1-2.5 2.5h-10A2.5 2.5 0 0 1 5 16.5v-11z" />
-                    <path d="M13 3v5a2 2 0 0 0 2 2h5" />
-                    <path d="M9 14h6M12 11v6" />
-                  </svg>
-                  Launch Demo
-                </Button>
-                <p className="whitespace-nowrap text-sm text-slate-400">
-                  No account needed · anonymous 3-day demo session
-                </p>
+              <div className="mt-4">
+                <LandingDemoAction />
               </div>
             </div>
           </section>
@@ -424,6 +411,7 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
-    </main>
+      </main>
+    </LandingSessionProvider>
   );
 }

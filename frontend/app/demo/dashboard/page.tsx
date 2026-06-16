@@ -1,3 +1,7 @@
+"use client";
+
+import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
+
 const ip = {
   width: 20,
   height: 20,
@@ -10,9 +14,24 @@ const ip = {
   "aria-hidden": true as const,
 };
 
+function datasetLabel(dataset: Record<string, unknown>, index: number): string {
+  const name = dataset.name;
+  if (typeof name === "string" && name.trim()) {
+    return name;
+  }
+
+  const id = dataset.id;
+  if (typeof id === "string" && id.trim()) {
+    return id;
+  }
+
+  return `Ready dataset ${index + 1}`;
+}
+
 export default function DashboardPage() {
-  // No ready dataset yet — AI panel disabled, canvas shows setup state.
-  const hasReadyDataset = false;
+  const { workspace } = useWorkspaceSession();
+  const readyDatasets = workspace?.ready_datasets ?? [];
+  const hasReadyDataset = readyDatasets.length > 0;
 
   return (
     <div className="px-6 py-8">
@@ -81,6 +100,14 @@ export default function DashboardPage() {
             className="mt-1.5 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink-muted disabled:cursor-not-allowed disabled:bg-surface-muted"
           >
             <option value="">No ready dataset</option>
+            {readyDatasets.map((dataset, index) => {
+              const label = datasetLabel(dataset, index);
+              return (
+                <option key={label} value={label}>
+                  {label}
+                </option>
+              );
+            })}
           </select>
 
           <label className="mt-4 block text-xs font-semibold text-ink">
@@ -121,19 +148,21 @@ export default function DashboardPage() {
               </svg>
             </span>
             <h3 className="mt-4 text-base font-semibold text-ink">
-              Prepare a dataset first
+              {hasReadyDataset ? "No dashboard cards yet" : "Prepare a dataset first"}
             </h3>
             <p className="prose-measure mt-2 text-sm text-ink-muted">
-              Once a dataset is uploaded and transformed to Data Marts,
-              generated chart cards appear here — each with a dataset badge,
-              direct insight, and collapsible evidence.
+              {hasReadyDataset
+                ? "Ask the AI Analytics Engineer after the analysis workflow is wired. Generated chart cards will appear here with evidence."
+                : "Once a dataset is uploaded and transformed to Data Marts, generated chart cards appear here with a dataset badge, direct insight, and collapsible evidence."}
             </p>
-            <a
-              href="/demo/upload"
-              className="mt-5 inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4.5 py-2.5 text-[0.9375rem] font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            >
-              Upload Dataset
-            </a>
+            {!hasReadyDataset ? (
+              <a
+                href="/demo/upload"
+                className="mt-5 inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4.5 py-2.5 text-[0.9375rem] font-semibold text-white transition-colors hover:bg-primary-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                Upload Dataset
+              </a>
+            ) : null}
           </div>
         </section>
       </div>

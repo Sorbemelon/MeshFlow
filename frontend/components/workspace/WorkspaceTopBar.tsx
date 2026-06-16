@@ -1,6 +1,32 @@
+"use client";
+
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 
 export function WorkspaceTopBar() {
+  const { backendStatus, sessionStatus, workspace } = useWorkspaceSession();
+
+  const demoBadge =
+    sessionStatus === "active"
+      ? {
+          status: "ready" as const,
+          label: workspace?.session.status === "reset" ? "Reset" : "Active",
+        }
+      : sessionStatus === "checking"
+        ? { status: "running" as const, label: "Checking..." }
+        : sessionStatus === "expired"
+          ? { status: "failed" as const, label: "Expired" }
+          : sessionStatus === "backend_unavailable"
+            ? { status: "review" as const, label: "Session unknown" }
+            : { status: "waiting" as const, label: "No session" };
+
+  const backendBadge =
+    backendStatus === "available"
+      ? { status: "ready" as const, label: "Backend available" }
+      : backendStatus === "checking"
+        ? { status: "running" as const, label: "Checking..." }
+        : { status: "failed" as const, label: "Backend unavailable" };
+
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-surface/95 px-6 py-3 backdrop-blur-sm">
       <div className="flex items-center gap-2.5">
@@ -26,11 +52,11 @@ export function WorkspaceTopBar() {
       <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-2.5 py-1">
           <span className="text-xs font-medium text-ink-muted">Demo Status</span>
-          <StatusBadge status="waiting" label="No session" />
+          <StatusBadge status={demoBadge.status} label={demoBadge.label} />
         </span>
         <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-2.5 py-1">
           <span className="text-xs font-medium text-ink-muted">Backend Status</span>
-          <StatusBadge status="review" label="Not connected" />
+          <StatusBadge status={backendBadge.status} label={backendBadge.label} />
         </span>
       </div>
     </header>

@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { WordmarkOnDark } from "@/components/brand/Logo";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import { cn } from "@/lib/cn";
-import { SIDEBAR_DEMO_USAGE_ITEMS } from "@/lib/demoLimits";
+import { DEMO_LIMITS } from "@/lib/demoLimits";
 
 type NavItem = {
   href: string;
@@ -85,6 +86,79 @@ const NAV: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const {
+    backendStatus,
+    limits,
+    resetMessage,
+    resetSession,
+    sessionStatus,
+    usage,
+    workspace,
+    isResetting,
+  } = useWorkspaceSession();
+
+  const sessionBadge =
+    sessionStatus === "active"
+      ? {
+          status: "ready" as const,
+          label: workspace?.session.status === "reset" ? "Reset" : "Active",
+        }
+      : sessionStatus === "checking"
+        ? { status: "running" as const, label: "Checking" }
+        : sessionStatus === "expired"
+          ? { status: "failed" as const, label: "Expired" }
+          : { status: "waiting" as const, label: "No session" };
+
+  const usageItems = [
+    {
+      label: "Session",
+      value: `${limits?.retention_days ?? 3} days`,
+    },
+    {
+      label: "CSV uploads",
+      value: `${usage?.uploaded_datasets_used ?? 0} / ${
+        limits?.max_uploaded_datasets_per_session ??
+        DEMO_LIMITS.uploadedCsvDatasetsPerSession
+      }`,
+    },
+    {
+      label: "Demo data",
+      value: `${usage?.demo_dataset_used ?? 0} / ${
+        limits?.max_demo_datasets_per_session ?? DEMO_LIMITS.demoDatasetPerSession
+      }`,
+    },
+    {
+      label: "Analyses",
+      value: `${usage?.successful_analysis_runs_used ?? 0} / ${
+        limits?.max_successful_analysis_runs_per_session ??
+        DEMO_LIMITS.successfulAnalysisRunsPerSession
+      }`,
+    },
+    {
+      label: "Cards",
+      value: `${usage?.dashboard_cards_used ?? 0} / ${
+        limits?.max_dashboard_cards_per_session ??
+        DEMO_LIMITS.dashboardCardsPerSession
+      }`,
+    },
+  ];
+
+  const canReset = sessionStatus === "active" && backendStatus === "available";
+
+  async function handleReset() {
+    if (!canReset) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Reset workspace metadata? Public quota usage is not restored unless backend development reset usage is enabled.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    await resetSession();
+  }
 
   return (
     <aside className="flex flex-col border-b border-shell-border bg-shell-deep text-slate-300 md:sticky md:top-0 md:h-screen md:w-60 md:shrink-0 md:border-b-0 md:border-r">
@@ -142,14 +216,14 @@ export function Sidebar() {
       <div className="mt-auto hidden border-t border-shell-border px-4 py-4 md:block">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-slate-400">Session</span>
-          <StatusBadge status="waiting" label="No session" />
+          <StatusBadge status={sessionBadge.status} label={sessionBadge.label} />
         </div>
         <div className="mt-3 rounded-lg border border-shell-border bg-shell/55 p-3">
           <p className="text-xs font-semibold text-slate-300">Demo limits</p>
           <div className="mt-2 grid gap-1.5">
-            {SIDEBAR_DEMO_USAGE_ITEMS.map((limit) => (
+            {usageItems.map((limit) => (
               <span
-                key={`${limit.value}-${limit.label}`}
+                key={limit.label}
                 className="grid grid-cols-[1fr_auto] items-center gap-2 rounded-md bg-slate-800/80 px-2.5 py-1.5 text-[0.6875rem] font-medium text-slate-300 ring-1 ring-shell-border"
               >
                 {limit.label}
@@ -160,17 +234,27 @@ export function Sidebar() {
             ))}
           </div>
           <p className="mt-2 text-[0.6875rem] leading-relaxed text-slate-500">
-            Usage appears here once the session API is connected. Delete/reset
-            does not restore used quota.
+            Public quota counts successful use and is not restored by
+            delete/reset.
           </p>
+          {resetMessage ? (
+            <p className="mt-2 text-[0.6875rem] leading-relaxed text-indigo-200">
+              {resetMessage}
+            </p>
+          ) : null}
         </div>
         <button
           type="button"
-          disabled
-          title="Available once a session is active (Phase 3)"
+          disabled={!canReset || isResetting}
+          onClick={() => void handleReset()}
+          title={
+            canReset
+              ? "Reset workspace metadata. Public quota usage is not restored by default."
+              : "Available once a backend-backed session is active."
+          }
           className="mt-3 w-full rounded-md border border-shell-border px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-shell/70 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Reset Demo
+          {isResetting ? "Resetting..." : "Reset Demo"}
         </button>
       </div>
     </aside>

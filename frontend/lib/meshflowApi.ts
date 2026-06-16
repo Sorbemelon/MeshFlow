@@ -1,0 +1,221 @@
+const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
+
+export const DEMO_SESSION_HEADER = "X-Demo-Session-Id";
+
+export type SessionStatus = "active" | "expired" | "reset";
+
+export type DemoSessionSummary = {
+  id: string;
+  status: SessionStatus;
+  created_at: string;
+  expires_at: string;
+  retention_days: number;
+};
+
+export type DemoLimits = {
+  retention_days: number;
+  max_demo_datasets_per_session: number;
+  max_uploaded_datasets_per_session: number;
+  max_upload_file_size_mb: number;
+  max_total_upload_size_mb: number;
+  max_successful_analysis_runs_per_session: number;
+  max_dashboard_cards_per_session: number;
+  preferred_charts_per_analysis: number;
+  max_charts_per_analysis: number;
+  dashboards_per_session: number;
+  allow_demo_reset_usage: boolean;
+};
+
+export type DemoUsage = {
+  successful_uploads_used: number;
+  demo_dataset_used: number;
+  uploaded_datasets_used: number;
+  successful_analysis_runs_used: number;
+  dashboard_cards_used: number;
+  total_upload_mb_used: number;
+};
+
+export type DemoSessionResponse = {
+  session: DemoSessionSummary;
+  limits: DemoLimits;
+  usage: DemoUsage;
+};
+
+export type DemoSessionResetResponse = DemoSessionResponse & {
+  usage_reset: boolean;
+  message: string;
+};
+
+export type DashboardSummary = {
+  dashboard_count: number;
+  cards: Record<string, unknown>[];
+  cards_used: number;
+  cards_limit: number;
+};
+
+export type HistorySummary = {
+  analysis_runs: Record<string, unknown>[];
+  successful_analysis_runs_used: number;
+  successful_analysis_runs_limit: number;
+};
+
+export type WorkspaceSetupStatus = {
+  backend: "available";
+  storage: "not_checked";
+  warehouse: "not_checked";
+  dbt: "not_checked";
+  ai: "not_checked";
+};
+
+export type WorkspaceResponse = {
+  session: DemoSessionSummary;
+  datasets: Record<string, unknown>[];
+  ready_datasets: Record<string, unknown>[];
+  active_dataset: Record<string, unknown> | null;
+  dashboard: DashboardSummary;
+  history: HistorySummary;
+  limits: DemoLimits;
+  setup_status: WorkspaceSetupStatus;
+};
+
+export type LimitsResponse = {
+  limits: DemoLimits;
+  usage: DemoUsage | null;
+};
+
+export type StructuredApiError = {
+  status?: "failed";
+  error_code: string;
+  failed_step?: string | null;
+  message: string;
+  next_action?: string | null;
+  statusCode?: number;
+};
+
+export class MeshFlowApiError extends Error {
+  readonly details: StructuredApiError;
+
+  constructor(details: StructuredApiError) {
+    super(details.message);
+    this.name = "MeshFlowApiError";
+    this.details = details;
+  }
+}
+
+function apiBaseUrl(): string {
+  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(
+    /\/+$/,
+    "",
+  );
+}
+
+function isStructuredApiError(value: unknown): value is StructuredApiError {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "error_code" in value &&
+    "message" in value
+  );
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+async function request<T>(
+  path: string,
+  options: {
+    method?: "GET" | "POST";
+    sessionId?: string | null;
+  } = {},
+): Promise<T> {
+  const headers = new Headers();
+  headers.set("Accept", "application/json");
+  if (options.sessionId) {
+    headers.set(DEMO_SESSION_HEADER, options.sessionId);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl()}${path}`, {
+      method: options.method ?? "GET",
+      headers,
+      cache: "no-store",
+    });
+  } catch {
+    throw new MeshFlowApiError({
+      error_code: "BACKEND_UNAVAILABLE",
+      failed_step: "backend",
+      message: "Backend is unavailable. Start the FastAPI backend and try again.",
+      next_action: "Start the backend server, then retry.",
+      statusCode: 0,
+    });
+  }
+
+  const body = await readJson(response);
+  if (!response.ok) {
+    if (isStructuredApiError(body)) {
+      throw new MeshFlowApiError({
+        ...body,
+        statusCode: response.status,
+      });
+    }
+
+    throw new MeshFlowApiError({
+      error_code: "BACKEND_REQUEST_FAILED",
+      failed_step: "backend",
+      message: "MeshFlow could not complete the backend request.",
+      next_action: "Check the backend response and retry.",
+      statusCode: response.status,
+    });
+  }
+
+  return body as T;
+}
+
+export function createDemoSession(): Promise<DemoSessionResponse> {
+  return request<DemoSessionResponse>("/demo-sessions", { method: "POST" });
+}
+
+export function getCurrentDemoSession(
+  sessionId: string,
+): Promise<DemoSessionResponse> {
+  return request<DemoSessionResponse>("/demo-sessions/current", { sessionId });
+}
+
+export function resetDemoSession(
+  sessionId: string,
+): Promise<DemoSessionResetResponse> {
+  return request<DemoSessionResetResponse>("/demo-sessions/reset", {
+    method: "POST",
+    sessionId,
+  });
+}
+
+export function getWorkspace(sessionId: string): Promise<WorkspaceResponse> {
+  return request<WorkspaceResponse>("/workspace", { sessionId });
+}
+
+export function getLimits(sessionId?: string | null): Promise<LimitsResponse> {
+  return request<LimitsResponse>("/limits", { sessionId });
+}
+
+export function isSessionInvalidError(error: unknown): boolean {
+  if (!(error instanceof MeshFlowApiError)) {
+    return false;
+  }
+
+  return (
+    error.details.error_code === "SESSION_EXPIRED" ||
+    error.details.error_code === "SESSION_NOT_FOUND"
+  );
+}

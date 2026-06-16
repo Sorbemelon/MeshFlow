@@ -66,7 +66,12 @@ export default function UploadPage() {
             <StatusBadge status="waiting" label="Not added" className="shrink-0 mt-0.5" />
           </div>
 
-          <Button className="mt-4" size="sm">
+          <Button
+            className="mt-4"
+            size="sm"
+            disabled
+            title="Demo dataset creation runs after the upload workflow is connected. Nothing is added yet."
+          >
             Use Demo Dataset
           </Button>
 
@@ -113,7 +118,7 @@ export default function UploadPage() {
                 <Button
                   size="sm"
                   disabled
-                  title="Upload runs after CSV validation and S3 + Snowflake readiness checks (Phase 4). Nothing is sent yet."
+                  title="Upload runs after CSV validation and S3 + Snowflake readiness checks. Nothing is sent yet."
                 >
                   Upload
                 </Button>

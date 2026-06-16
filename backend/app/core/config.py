@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     )
     app_version: str = Field(default="0.1.0", alias="APP_VERSION")
     debug: bool = Field(default=True, alias="APP_DEBUG")
+    backend_cors_origins: str = Field(
+        default="http://localhost:3000", alias="BACKEND_CORS_ORIGINS"
+    )
 
     # Metadata database only. This must not be used as an analytical engine.
     database_url: str = Field(
@@ -66,6 +69,14 @@ class Settings(BaseSettings):
     gemini_model_1: str | None = Field(default=None, alias="GEMINI_MODEL_1")
     gemini_model_2: str | None = Field(default=None, alias="GEMINI_MODEL_2")
     gemini_model_3: str | None = Field(default=None, alias="GEMINI_MODEL_3")
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.backend_cors_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache(maxsize=1)

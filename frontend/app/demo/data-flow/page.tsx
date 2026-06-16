@@ -1,4 +1,7 @@
+"use client";
+
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import { cn } from "@/lib/cn";
 
 // Preparation rail — ONLY these six stages (FRONTEND_UX_SCOPE §7).
@@ -31,9 +34,24 @@ const ip = {
   "aria-hidden": true as const,
 };
 
+function datasetLabel(dataset: Record<string, unknown>, index: number): string {
+  const name = dataset.name;
+  if (typeof name === "string" && name.trim()) {
+    return name;
+  }
+
+  const id = dataset.id;
+  if (typeof id === "string" && id.trim()) {
+    return id;
+  }
+
+  return `Dataset ${index + 1}`;
+}
+
 export default function DataFlowPage() {
-  // No dataset yet — everything shows its honest no-dataset state.
-  const hasDataset = false;
+  const { workspace } = useWorkspaceSession();
+  const datasets = workspace?.datasets ?? [];
+  const hasDataset = datasets.length > 0;
 
   return (
     <div className="px-6 py-8">
@@ -72,6 +90,14 @@ export default function DataFlowPage() {
               className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm text-ink-muted disabled:cursor-not-allowed disabled:bg-surface-muted"
             >
               <option value="">No available dataset</option>
+              {datasets.map((dataset, index) => {
+                const label = datasetLabel(dataset, index);
+                return (
+                  <option key={label} value={label}>
+                    {label}
+                  </option>
+                );
+              })}
             </select>
           </div>
 
@@ -129,10 +155,18 @@ export default function DataFlowPage() {
           </div>
 
           <EmptyState
-            title="No dataset to prepare yet"
-            description="Add the demo dataset or upload a CSV. Once a dataset exists, the preparation stages and evidence tabs become active here."
-            ctaLabel="Upload Dataset"
-            ctaHref="/demo/upload"
+            title={
+              hasDataset
+                ? "Preparation details are not started"
+                : "No dataset to prepare yet"
+            }
+            description={
+              hasDataset
+                ? "Preparation evidence appears after warehouse and dbt processing is available."
+                : "Add the demo dataset or upload a CSV. Once a dataset exists, the preparation stages and evidence tabs become active here."
+            }
+            ctaLabel={hasDataset ? undefined : "Upload Dataset"}
+            ctaHref={hasDataset ? undefined : "/demo/upload"}
             className="border-blue-200 bg-blue-50/40"
             icon={
               <svg {...ip}>
