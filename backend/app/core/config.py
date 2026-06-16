@@ -6,9 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Application settings.
+    """Application settings for metadata-backed backend phases.
 
-    Phase 1 intentionally configures only the backend foundation.
     Warehouse/S3/dbt/AI settings are declared for future phases but are not used yet.
     """
 
@@ -31,7 +30,26 @@ class Settings(BaseSettings):
         default="sqlite:///./.local/meshflow_metadata.db", alias="DATABASE_URL"
     )
 
-    allow_demo_reset_usage: bool = Field(default=True, alias="ALLOW_DEMO_RESET_USAGE")
+    demo_session_retention_days: int = Field(
+        default=3, alias="DEMO_SESSION_RETENTION_DAYS"
+    )
+    max_demo_datasets_per_session: int = Field(
+        default=1, alias="MAX_DEMO_DATASETS_PER_SESSION"
+    )
+    max_uploaded_datasets_per_session: int = Field(
+        default=1, alias="MAX_UPLOADED_DATASETS_PER_SESSION"
+    )
+    max_upload_file_size_mb: int = Field(default=5, alias="MAX_UPLOAD_FILE_SIZE_MB")
+    max_total_upload_size_mb: int = Field(default=10, alias="MAX_TOTAL_UPLOAD_SIZE_MB")
+    max_successful_analysis_runs_per_session: int = Field(
+        default=8, alias="MAX_SUCCESSFUL_ANALYSIS_RUNS_PER_SESSION"
+    )
+    max_dashboard_cards_per_session: int = Field(
+        default=8, alias="MAX_DASHBOARD_CARDS_PER_SESSION"
+    )
+    max_charts_per_analysis: int = Field(default=3, alias="MAX_CHARTS_PER_ANALYSIS")
+    dashboards_per_session: int = Field(default=1, alias="DASHBOARDS_PER_SESSION")
+    allow_demo_reset_usage: bool = Field(default=False, alias="ALLOW_DEMO_RESET_USAGE")
 
     # Future phases only.
     aws_region: str | None = Field(default=None, alias="AWS_REGION")

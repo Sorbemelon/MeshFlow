@@ -5,12 +5,12 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db.base import Base
-
-# Import future model modules here so Alembic can discover metadata.
-# from app.models.demo_session import DemoSession
+from app.models import DemoSession
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
+
+_ = DemoSession
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
