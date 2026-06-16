@@ -3,6 +3,7 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from app.schemas.demo_session import DemoSessionSummary
+from app.schemas.dataset import DatasetSummary
 from app.schemas.limits import DemoLimits
 
 
@@ -29,9 +30,9 @@ class WorkspaceSetupStatus(BaseModel):
 
 class WorkspaceResponse(BaseModel):
     session: DemoSessionSummary
-    datasets: list[dict[str, Any]]
-    ready_datasets: list[dict[str, Any]]
-    active_dataset: dict[str, Any] | None
+    datasets: list[DatasetSummary]
+    ready_datasets: list[DatasetSummary]
+    active_dataset: DatasetSummary | None
     dashboard: DashboardSummary
     history: HistorySummary
     limits: DemoLimits

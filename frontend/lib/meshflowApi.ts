@@ -67,11 +67,72 @@ export type WorkspaceSetupStatus = {
   ai: "not_checked";
 };
 
+export type DatasetStatus =
+  | "schema_review"
+  | "warehouse_loaded"
+  | "failed"
+  | "deleted";
+
+export type DatasetSummary = {
+  id: string;
+  name: string;
+  source_type: "uploaded_csv" | "demo_raw_retail_later";
+  status: DatasetStatus;
+  row_count: number;
+  column_count: number;
+  raw_table_name: string;
+  created_at: string;
+};
+
+export type ColumnProfileSummary = {
+  column_index: number;
+  raw_column_name: string;
+  normalized_column_name: string;
+  snowflake_column_name: string;
+  detected_type:
+    | "date"
+    | "integer"
+    | "decimal"
+    | "boolean"
+    | "string"
+    | "identifier"
+    | "unknown";
+  null_count: number;
+  null_rate: number;
+  unique_count: number | null;
+  sample_values: string[];
+};
+
+export type SchemaPreview = {
+  columns: ColumnProfileSummary[];
+};
+
+export type DatasetFileSummary = {
+  file_name: string;
+  size_bytes: number;
+  storage_key: string;
+  checksum_sha256: string | null;
+};
+
+export type DatasetDetailResponse = {
+  dataset: DatasetSummary;
+  file: DatasetFileSummary | null;
+  schema_preview: SchemaPreview;
+};
+
+export type DatasetUploadResponse = {
+  status: "uploaded";
+  dataset: DatasetSummary;
+  file: DatasetFileSummary;
+  schema_preview: SchemaPreview;
+  next_route: string;
+};
+
 export type WorkspaceResponse = {
   session: DemoSessionSummary;
-  datasets: Record<string, unknown>[];
-  ready_datasets: Record<string, unknown>[];
-  active_dataset: Record<string, unknown> | null;
+  datasets: DatasetSummary[];
+  ready_datasets: DatasetSummary[];
+  active_dataset: DatasetSummary | null;
   dashboard: DashboardSummary;
   history: HistorySummary;
   limits: DemoLimits;
@@ -271,6 +332,27 @@ export function uploadPreflight(
     sessionId,
     body: formData,
   });
+}
+
+export function uploadDataset(
+  file: File,
+  sessionId: string,
+): Promise<DatasetUploadResponse> {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  return request<DatasetUploadResponse>("/datasets/upload", {
+    method: "POST",
+    sessionId,
+    body: formData,
+  });
+}
+
+export function getDataset(
+  datasetId: string,
+  sessionId: string,
+): Promise<DatasetDetailResponse> {
+  return request<DatasetDetailResponse>(`/datasets/${datasetId}`, { sessionId });
 }
 
 export function isSessionInvalidError(error: unknown): boolean {

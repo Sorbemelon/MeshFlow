@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, settings
 from app.core.errors import AppError
+from app.models.dataset import Dataset
 from app.models.demo_session import DemoSession
+from app.schemas.dataset import DatasetSummary
 from app.schemas.demo_session import (
     DemoSessionResetResponse,
     DemoSessionResponse,
@@ -73,6 +75,19 @@ def summary_from_session(
         created_at=as_utc(session.created_at),
         expires_at=as_utc(session.expires_at),
         retention_days=config.demo_session_retention_days,
+    )
+
+
+def dataset_summary(dataset: Dataset) -> DatasetSummary:
+    return DatasetSummary(
+        id=dataset.id,
+        name=dataset.name,
+        source_type=dataset.source_type,
+        status=dataset.status,
+        row_count=dataset.row_count,
+        column_count=dataset.column_count,
+        raw_table_name=dataset.raw_table_name,
+        created_at=dataset.created_at.isoformat(),
     )
 
 
@@ -247,10 +262,15 @@ def get_workspace_response(
     session = get_required_session(db, session_id)
     limits = configured_limits(config)
     usage = usage_from_session(session)
+    datasets = db.scalars(
+        select(Dataset)
+        .where(Dataset.demo_session_id == session.id, Dataset.deleted_at.is_(None))
+        .order_by(Dataset.created_at.desc())
+    ).all()
 
     return WorkspaceResponse(
         session=summary_from_session(session, config),
-        datasets=[],
+        datasets=[dataset_summary(dataset) for dataset in datasets],
         ready_datasets=[],
         active_dataset=None,
         dashboard=DashboardSummary(

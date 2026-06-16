@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     aws_region: str | None = Field(default=None, alias="AWS_REGION")
     aws_s3_bucket: str | None = Field(default=None, alias="AWS_S3_BUCKET")
     s3_bucket_name: str | None = Field(default=None, alias="S3_BUCKET_NAME")
+    s3_upload_prefix: str = Field(default="meshflow-demo", alias="S3_UPLOAD_PREFIX")
     aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str | None = Field(default=None, alias="AWS_SECRET_ACCESS_KEY")
 
@@ -68,6 +69,7 @@ class Settings(BaseSettings):
     snowflake_warehouse: str | None = Field(default=None, alias="SNOWFLAKE_WAREHOUSE")
     snowflake_database: str | None = Field(default=None, alias="SNOWFLAKE_DATABASE")
     snowflake_schema: str | None = Field(default=None, alias="SNOWFLAKE_SCHEMA")
+    snowflake_stage_name: str | None = Field(default=None, alias="SNOWFLAKE_STAGE_NAME")
 
     openai_model: str | None = Field(default=None, alias="OPENAI_MODEL")
     gemini_model_1: str | None = Field(default=None, alias="GEMINI_MODEL_1")

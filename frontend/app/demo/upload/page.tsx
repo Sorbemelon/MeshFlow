@@ -1,14 +1,17 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import {
   isSessionInvalidError,
   MeshFlowApiError,
+  uploadDataset,
   uploadPreflight,
   type ReadinessCheck,
+  type DatasetUploadResponse,
   type UploadPreflightResponse,
 } from "@/lib/meshflowApi";
 
@@ -90,6 +93,7 @@ function readinessBadge(check: ReadinessCheck) {
 }
 
 export default function UploadPage() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const { limits, refresh, sessionId } = useWorkspaceSession();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -97,6 +101,8 @@ export default function UploadPage() {
   const [frontendErrors, setFrontendErrors] = useState<string[]>([]);
   const [preflight, setPreflight] = useState<UploadPreflightResponse | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState<DatasetUploadResponse | null>(null);
 
   const fileLimitMb = limits?.max_upload_file_size_mb ?? 5;
 
@@ -114,6 +120,7 @@ export default function UploadPage() {
       const response = await uploadPreflight(file, sessionId);
       setPreflight(response);
       setCheckState(response.can_upload ? "ready" : "blocked");
+      setUploadResult(null);
       void refresh();
     } catch (caught) {
       if (isSessionInvalidError(caught)) {
@@ -133,6 +140,7 @@ export default function UploadPage() {
     setSelectedFile(file);
     setPreflight(null);
     setRequestError(null);
+    setUploadResult(null);
 
     if (!file) {
       setFrontendErrors([]);
@@ -150,11 +158,41 @@ export default function UploadPage() {
     void runPreflight(file);
   }
 
+  async function handleUpload() {
+    if (!selectedFile || !sessionId || !preflight?.can_upload || isUploading) {
+      return;
+    }
+
+    setIsUploading(true);
+    setRequestError(null);
+
+    try {
+      const response = await uploadDataset(selectedFile, sessionId);
+      setUploadResult(response);
+      await refresh();
+      router.push(response.next_route);
+    } catch (caught) {
+      if (isSessionInvalidError(caught)) {
+        void refresh();
+      }
+
+      setRequestError(
+        caught instanceof MeshFlowApiError
+          ? caught.details.message
+          : "MeshFlow could not complete the upload.",
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
   const uploadButtonLabel =
-    checkState === "checking"
+    isUploading
+      ? "Uploading..."
+      : checkState === "checking"
       ? "Checking..."
       : checkState === "ready"
-        ? "Ready for upload"
+        ? "Upload"
         : "Upload";
 
   const issueList = [
@@ -252,7 +290,7 @@ export default function UploadPage() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  disabled={checkState === "checking"}
+                  disabled={checkState === "checking" || isUploading}
                   onClick={() => inputRef.current?.click()}
                 >
                   Change file
@@ -265,10 +303,15 @@ export default function UploadPage() {
               {selectedFile ? (
                 <Button
                   size="sm"
-                  disabled
-                  title="Upload execution starts after the upload/load step is implemented. Nothing is sent yet."
+                  disabled={!preflight?.can_upload || isUploading || checkState === "checking"}
+                  onClick={handleUpload}
+                  title={
+                    preflight?.can_upload
+                      ? "Upload the CSV to S3 and load it into Snowflake Warehouse Raw."
+                      : "Upload is enabled only after validation, quota, S3, and Snowflake checks pass."
+                  }
                 >
-                  {checkState === "checking" ? (
+                  {checkState === "checking" || isUploading ? (
                     <svg
                       width={14}
                       height={14}
@@ -313,6 +356,21 @@ export default function UploadPage() {
           {requestError ? (
             <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
               {requestError}
+            </div>
+          ) : null}
+
+          {isUploading ? (
+            <div className="mt-3 flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
+              <StatusBadge status="running" label="Uploading" />
+              <span>Uploading to S3 and loading Snowflake Warehouse Raw...</span>
+            </div>
+          ) : null}
+
+          {uploadResult ? (
+            <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+              Upload completed for{" "}
+              <span className="font-mono">{uploadResult.dataset.name}</span>.
+              Opening Data Flow for schema review.
             </div>
           ) : null}
 
@@ -364,7 +422,7 @@ export default function UploadPage() {
 
               <p className="rounded-md border border-border bg-surface px-3 py-2 text-xs text-ink-muted">
                 {preflight.can_upload
-                  ? "Ready for upload. Upload execution will be enabled after the upload/load step is implemented."
+                  ? "Ready for upload. The next click will upload to S3, load Warehouse Raw in Snowflake, and open Data Flow for schema review."
                   : preflight.message}
               </p>
             </div>

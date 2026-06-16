@@ -1,5 +1,6 @@
 from app.core.config import Settings, settings
 from app.schemas.upload_preflight import ReadinessCheck
+from app.services import snowflake_service
 
 
 def _missing(names: dict[str, str | None]) -> list[str]:
@@ -18,14 +19,39 @@ def check_s3_readiness(config: Settings = settings) -> ReadinessCheck:
     if missing:
         return ReadinessCheck(
             status="not_configured",
-            message="S3 is not configured for upload preflight.",
+            message="S3 is not configured for uploads.",
             next_action=f"Set {', '.join(missing)} before enabling uploads.",
         )
 
+    try:
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+    except ImportError:
+        return ReadinessCheck(
+            status="failed",
+            message="S3 configuration is present, but boto3 is not installed.",
+            next_action="Install backend requirements before enabling uploads.",
+        )
+
+    try:
+        client = boto3.client(
+            "s3",
+            region_name=config.aws_region,
+            aws_access_key_id=config.aws_access_key_id,
+            aws_secret_access_key=config.aws_secret_access_key,
+        )
+        client.head_bucket(Bucket=config.configured_s3_bucket)
+    except (BotoCoreError, ClientError):
+        return ReadinessCheck(
+            status="failed",
+            message="S3 readiness check failed for the configured bucket.",
+            next_action="Verify AWS credentials, region, bucket name, and bucket permissions.",
+        )
+
     return ReadinessCheck(
-        status="not_checked",
-        message="S3 configuration is present, but live S3 readiness is not checked yet.",
-        next_action="Add a lightweight S3 readiness check before enabling upload execution.",
+        status="ready",
+        message="S3 bucket readiness check passed.",
+        next_action=None,
     )
 
 
@@ -39,17 +65,30 @@ def check_snowflake_readiness(config: Settings = settings) -> ReadinessCheck:
             "SNOWFLAKE_WAREHOUSE": config.snowflake_warehouse,
             "SNOWFLAKE_DATABASE": config.snowflake_database,
             "SNOWFLAKE_SCHEMA": config.snowflake_schema,
+            "SNOWFLAKE_STAGE_NAME": config.snowflake_stage_name,
         }
     )
     if missing:
         return ReadinessCheck(
             status="not_configured",
-            message="Snowflake is not configured for upload preflight.",
+            message="Snowflake is not configured for Warehouse Raw loading.",
             next_action=f"Set {', '.join(missing)} before enabling uploads.",
         )
 
+    try:
+        snowflake_service.check_connection_and_stage(config)
+    except snowflake_service.SnowflakeServiceError:
+        return ReadinessCheck(
+            status="failed",
+            message="Snowflake readiness check failed for the configured warehouse or stage.",
+            next_action=(
+                "Verify Snowflake credentials, database, schema, warehouse, role, "
+                "and external stage access."
+            ),
+        )
+
     return ReadinessCheck(
-        status="not_checked",
-        message="Snowflake configuration is present, but live Snowflake readiness is not checked yet.",
-        next_action="Add a lightweight Snowflake readiness check before enabling upload execution.",
+        status="ready",
+        message="Snowflake warehouse and stage readiness check passed.",
+        next_action=None,
     )

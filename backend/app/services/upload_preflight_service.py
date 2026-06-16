@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from dataclasses import dataclass
 from pathlib import PurePath
 
 from fastapi import UploadFile
@@ -27,6 +28,27 @@ from app.services.demo_session_service import (
 
 PREVIEW_ROW_LIMIT = 25
 BYTES_PER_MB = 1024 * 1024
+
+
+@dataclass
+class CsvUploadValidation:
+    file: UploadFileValidation
+    content: bytes
+    rows: list[list[str]]
+    snowflake_column_names: list[str]
+
+    @property
+    def data_rows(self) -> list[list[str]]:
+        if not self.rows:
+            return []
+        return [row for row in self.rows[1:] if any(cell.strip() for cell in row)]
+
+
+@dataclass
+class UploadPreflightCheck:
+    session: DemoSession
+    csv: CsvUploadValidation
+    quota: UploadQuotaSummary
 
 
 def _empty_file_result(file_name: str = "") -> UploadFileValidation:
@@ -74,7 +96,21 @@ def _file_too_large_result(file_name: str, content: bytes, limit_mb: int) -> Upl
     return result
 
 
-def _validate_csv_content(file_name: str, content: bytes, limit_mb: int) -> UploadFileValidation:
+def _csv_result(
+    file_result: UploadFileValidation,
+    content: bytes,
+    rows: list[list[str]] | None = None,
+    snowflake_column_names: list[str] | None = None,
+) -> CsvUploadValidation:
+    return CsvUploadValidation(
+        file=file_result,
+        content=content,
+        rows=rows or [],
+        snowflake_column_names=snowflake_column_names or [],
+    )
+
+
+def _validate_csv_content(file_name: str, content: bytes, limit_mb: int) -> CsvUploadValidation:
     result = _empty_file_result(file_name)
     result.size_bytes = len(content)
     result.size_mb = _size_mb(len(content))
@@ -82,44 +118,44 @@ def _validate_csv_content(file_name: str, content: bytes, limit_mb: int) -> Uplo
     if not file_name:
         result.errors.append("INVALID_CSV_FORMAT")
         result.warnings.append("A CSV file is required.")
-        return result
+        return _csv_result(result, content)
 
     if result.extension != ".csv":
         result.errors.append("INVALID_FILE_TYPE")
         result.warnings.append("Only .csv files are supported in the MVP.")
-        return result
+        return _csv_result(result, content)
 
     if not content:
         result.errors.append("INVALID_CSV_FORMAT")
         result.warnings.append("The selected CSV is empty.")
-        return result
+        return _csv_result(result, content)
 
     if len(content) > limit_mb * BYTES_PER_MB:
-        return _file_too_large_result(file_name, content, limit_mb)
+        return _csv_result(_file_too_large_result(file_name, content, limit_mb), content)
 
     if b"\x00" in content:
         result.errors.append("INVALID_CSV_FORMAT")
         result.warnings.append("The selected file appears to contain unsupported binary content.")
-        return result
+        return _csv_result(result, content)
 
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
         result.errors.append("INVALID_CSV_FORMAT")
         result.warnings.append("The CSV must be encoded as UTF-8.")
-        return result
+        return _csv_result(result, content)
 
     try:
         rows = list(csv.reader(io.StringIO(text), strict=True))
     except csv.Error:
         result.errors.append("INVALID_CSV_FORMAT")
         result.warnings.append("The CSV parser could not read the selected file.")
-        return result
+        return _csv_result(result, content)
 
     if not rows:
         result.errors.append("INVALID_CSV_FORMAT")
         result.warnings.append("The CSV must include a header row.")
-        return result
+        return _csv_result(result, content)
 
     headers = rows[0]
     result.headers = headers
@@ -127,7 +163,7 @@ def _validate_csv_content(file_name: str, content: bytes, limit_mb: int) -> Uplo
     if not headers:
         result.errors.append("INVALID_CSV_FORMAT")
         result.warnings.append("The CSV must include a header row.")
-        return result
+        return _csv_result(result, content, rows)
 
     if len(headers) < 2:
         result.errors.append("INVALID_CSV_FORMAT")
@@ -157,7 +193,7 @@ def _validate_csv_content(file_name: str, content: bytes, limit_mb: int) -> Uplo
         result.warnings.append("Previewed rows must have the same width as the header row.")
 
     result.valid = not result.errors
-    return result
+    return _csv_result(result, content, rows, normalized_headers)
 
 
 def _quota_summary(session: DemoSession, file_size_mb: float, config: Settings) -> UploadQuotaSummary:
@@ -180,12 +216,12 @@ def _quota_summary(session: DemoSession, file_size_mb: float, config: Settings) 
     return quota
 
 
-async def run_upload_preflight(
+async def validate_upload_preflight(
     db: Session,
     session_id: str | None,
     file: UploadFile | None,
     config: Settings = settings,
-) -> UploadPreflightResponse:
+) -> UploadPreflightCheck:
     session = get_required_session(db, session_id)
     limits = configured_limits(config)
     read_limit = limits.max_upload_file_size_mb * BYTES_PER_MB + 1
@@ -194,15 +230,28 @@ async def run_upload_preflight(
         file_result = _empty_file_result()
         file_result.errors.append("INVALID_CSV_FORMAT")
         file_result.warnings.append("A CSV file is required.")
+        csv = _csv_result(file_result, b"")
     else:
         content = await file.read(read_limit)
-        file_result = _validate_csv_content(
+        csv = _validate_csv_content(
             file.filename or "",
             content,
             limits.max_upload_file_size_mb,
         )
 
-    quota = _quota_summary(session, file_result.size_mb, config)
+    quota = _quota_summary(session, csv.file.size_mb, config)
+    return UploadPreflightCheck(session=session, csv=csv, quota=quota)
+
+
+async def run_upload_preflight(
+    db: Session,
+    session_id: str | None,
+    file: UploadFile | None,
+    config: Settings = settings,
+) -> UploadPreflightResponse:
+    check = await validate_upload_preflight(db, session_id, file, config)
+    file_result = check.csv.file
+    quota = check.quota
 
     if file_result.valid and not quota.errors:
         s3_readiness = readiness_service.check_s3_readiness(config)
