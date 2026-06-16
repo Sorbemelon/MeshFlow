@@ -196,6 +196,10 @@ def _validate_csv_content(file_name: str, content: bytes, limit_mb: int) -> CsvU
     return _csv_result(result, content, rows, normalized_headers)
 
 
+def validate_csv_content(file_name: str, content: bytes, limit_mb: int) -> CsvUploadValidation:
+    return _validate_csv_content(file_name, content, limit_mb)
+
+
 def _quota_summary(session: DemoSession, file_size_mb: float, config: Settings) -> UploadQuotaSummary:
     limits = configured_limits(config)
     usage = usage_from_session(session)

@@ -11,6 +11,7 @@ from app.schemas.dataset import (
 from app.schemas.upload_preflight import UploadPreflightResponse
 from app.services.demo_session_service import DEMO_SESSION_HEADER
 from app.services.dataset_service import (
+    create_raw_retail_demo_dataset,
     get_dataset_detail,
     get_dataset_profile,
     list_datasets,
@@ -63,3 +64,11 @@ async def upload_csv_dataset(
     db: Session = Depends(get_db),
 ) -> DatasetUploadResponse:
     return await upload_dataset(db, demo_session_id, file)
+
+
+@router.post("/demo-retail", response_model=DatasetUploadResponse)
+def create_demo_retail_dataset(
+    demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
+    db: Session = Depends(get_db),
+) -> DatasetUploadResponse:
+    return create_raw_retail_demo_dataset(db, demo_session_id)

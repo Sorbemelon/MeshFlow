@@ -3,7 +3,8 @@ from __future__ import annotations
 import hashlib
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from typing import Iterable
+from pathlib import Path
+from typing import Iterable, Literal
 
 from fastapi import UploadFile, status
 from sqlalchemy import select
@@ -29,10 +30,12 @@ from app.schemas.dataset import (
 from app.schemas.upload_preflight import ReadinessCheck
 from app.services import readiness_service, snowflake_service, storage_service
 from app.services.demo_session_service import (
+    configured_limits,
     get_required_session,
 )
 from app.services.upload_preflight_service import (
     CsvUploadValidation,
+    validate_csv_content,
     validate_upload_preflight,
 )
 
@@ -40,6 +43,12 @@ from app.services.upload_preflight_service import (
 NULL_STRINGS = {"", "NULL", "null"}
 BOOLEAN_STRINGS = {"true", "false", "yes", "no", "y", "n", "0", "1"}
 DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y", "%d/%m/%Y")
+RAW_RETAIL_DEMO_SOURCE_TYPE = "demo_raw_retail"
+RAW_RETAIL_DEMO_NAME = "Raw Retail Transactions Demo"
+RAW_RETAIL_DEMO_FILE_NAME = "raw_retail_transactions_demo.csv"
+RAW_RETAIL_DEMO_FIXTURE_PATH = (
+    Path(__file__).resolve().parents[1] / "fixtures" / RAW_RETAIL_DEMO_FILE_NAME
+)
 
 
 def _profile_summary(profile: ColumnProfile) -> ColumnProfileSummary:
@@ -206,18 +215,7 @@ def _validation_error(errors: list[str], failed_step: str) -> AppError:
     )
 
 
-async def upload_dataset(
-    db: Session,
-    session_id: str | None,
-    file: UploadFile | None,
-    config: Settings = settings,
-) -> DatasetUploadResponse:
-    check = await validate_upload_preflight(db, session_id, file, config)
-    if not check.csv.file.valid:
-        raise _validation_error(check.csv.file.errors, "upload_validation")
-    if check.quota.errors:
-        raise _validation_error(check.quota.errors, "upload_quota")
-
+def _ensure_external_readiness(config: Settings) -> None:
     s3_readiness = readiness_service.check_s3_readiness(config)
     if s3_readiness.status != "ready":
         raise _readiness_error(
@@ -234,15 +232,44 @@ async def upload_dataset(
             check=snowflake_readiness,
         )
 
+
+def _response_from_dataset(
+    *,
+    response_status: Literal["uploaded", "already_exists"],
+    dataset: Dataset,
+    dataset_file: DatasetFile,
+    message: str | None = None,
+) -> DatasetUploadResponse:
+    return DatasetUploadResponse(
+        status=response_status,
+        message=message,
+        dataset=dataset_summary(dataset),
+        file=dataset_file_summary(dataset_file),
+        schema_preview=schema_preview_from_profiles(dataset.column_profiles),
+        next_route=f"/demo/data-flow?datasetId={dataset.id}",
+    )
+
+
+def _load_dataset_from_csv(
+    *,
+    db: Session,
+    session_id: str,
+    csv: CsvUploadValidation,
+    dataset_name: str,
+    source_type: str,
+    content_type: str | None,
+    storage_group: str,
+    config: Settings,
+) -> tuple[Dataset, DatasetFile]:
     dataset_id = generate_dataset_id()
-    content_type = file.content_type if file else "text/csv"
     try:
         storage_result = storage_service.upload_csv_to_s3(
-            session_id=check.session.id,
+            session_id=session_id,
             dataset_id=dataset_id,
-            file_name=check.csv.file.file_name,
-            content=check.csv.content,
+            file_name=csv.file.file_name,
+            content=csv.content,
             content_type=content_type,
+            storage_group=storage_group,
             config=config,
         )
     except storage_service.StorageServiceError as exc:
@@ -257,7 +284,7 @@ async def upload_dataset(
     try:
         load_result = snowflake_service.create_and_load_raw_table(
             dataset_id=dataset_id,
-            snowflake_columns=check.csv.snowflake_column_names,
+            snowflake_columns=csv.snowflake_column_names,
             storage_key=storage_result.storage_key,
             config=config,
         )
@@ -273,27 +300,59 @@ async def upload_dataset(
 
     dataset = Dataset(
         id=dataset_id,
-        demo_session_id=check.session.id,
-        name=check.csv.file.file_name,
-        source_type="uploaded_csv",
+        demo_session_id=session_id,
+        name=dataset_name,
+        source_type=source_type,
         status="schema_review",
         raw_table_name=load_result.raw_table_name,
         storage_uri=storage_result.storage_uri,
         storage_key=storage_result.storage_key,
         row_count=load_result.rows_loaded,
-        column_count=check.csv.file.column_count,
+        column_count=csv.file.column_count,
     )
     dataset_file = DatasetFile(
         dataset=dataset,
-        file_name=check.csv.file.file_name,
+        file_name=csv.file.file_name,
         storage_key=storage_result.storage_key,
-        file_size_bytes=check.csv.file.size_bytes,
+        file_size_bytes=csv.file.size_bytes,
         content_type=content_type,
-        checksum_sha256=hashlib.sha256(check.csv.content).hexdigest(),
-        row_count=len(check.csv.data_rows),
-        column_count=check.csv.file.column_count,
+        checksum_sha256=hashlib.sha256(csv.content).hexdigest(),
+        row_count=len(csv.data_rows),
+        column_count=csv.file.column_count,
     )
-    profiles = build_column_profiles(check.csv, dataset_file)
+    profiles = build_column_profiles(csv, dataset_file)
+
+    db.add(dataset)
+    db.add(dataset_file)
+    db.add_all(profiles)
+    return dataset, dataset_file
+
+
+async def upload_dataset(
+    db: Session,
+    session_id: str | None,
+    file: UploadFile | None,
+    config: Settings = settings,
+) -> DatasetUploadResponse:
+    check = await validate_upload_preflight(db, session_id, file, config)
+    if not check.csv.file.valid:
+        raise _validation_error(check.csv.file.errors, "upload_validation")
+    if check.quota.errors:
+        raise _validation_error(check.quota.errors, "upload_quota")
+
+    _ensure_external_readiness(config)
+    content_type = file.content_type if file else "text/csv"
+
+    dataset, dataset_file = _load_dataset_from_csv(
+        db=db,
+        session_id=check.session.id,
+        csv=check.csv,
+        dataset_name=check.csv.file.file_name,
+        source_type="uploaded_csv",
+        content_type=content_type,
+        storage_group="raw",
+        config=config,
+    )
 
     check.session.successful_uploads_used += 1
     check.session.uploaded_datasets_used += 1
@@ -302,19 +361,102 @@ async def upload_dataset(
         4,
     )
 
-    db.add(dataset)
-    db.add(dataset_file)
-    db.add_all(profiles)
     db.commit()
     db.refresh(dataset)
     db.refresh(dataset_file)
 
-    return DatasetUploadResponse(
-        status="uploaded",
-        dataset=dataset_summary(dataset),
-        file=dataset_file_summary(dataset_file),
-        schema_preview=schema_preview_from_profiles(dataset.column_profiles),
-        next_route=f"/demo/data-flow?datasetId={dataset.id}",
+    return _response_from_dataset(
+        response_status="uploaded",
+        dataset=dataset,
+        dataset_file=dataset_file,
+    )
+
+
+def _get_existing_raw_retail_demo(db: Session, session_id: str) -> Dataset | None:
+    return db.scalar(
+        select(Dataset)
+        .where(
+            Dataset.demo_session_id == session_id,
+            Dataset.source_type == RAW_RETAIL_DEMO_SOURCE_TYPE,
+            Dataset.deleted_at.is_(None),
+        )
+        .options(selectinload(Dataset.files), selectinload(Dataset.column_profiles))
+    )
+
+
+def _fixture_validation_error() -> AppError:
+    return AppError(
+        error_code="DEMO_DATASET_FAILED",
+        failed_step="demo_dataset_fixture",
+        message="The curated Raw Retail Transactions Demo fixture is not loadable.",
+        next_action="Check the backend raw retail fixture before retrying.",
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+
+
+def create_raw_retail_demo_dataset(
+    db: Session,
+    session_id: str | None,
+    config: Settings = settings,
+) -> DatasetUploadResponse:
+    session = get_required_session(db, session_id)
+    existing = _get_existing_raw_retail_demo(db, session.id)
+    if existing is not None and existing.files:
+        return _response_from_dataset(
+            response_status="already_exists",
+            dataset=existing,
+            dataset_file=existing.files[0],
+            message=(
+                "The Raw Retail Transactions Demo has already been added to this session."
+            ),
+        )
+
+    limits = configured_limits(config)
+    if session.demo_dataset_used >= limits.max_demo_datasets_per_session:
+        raise AppError(
+            error_code="DEMO_DATASET_ALREADY_ADDED",
+            failed_step="demo_dataset_quota",
+            message="The Raw Retail Transactions Demo has already been used in this session.",
+            next_action="Open Data Flow for the existing dataset or start a new demo session.",
+            status_code=status.HTTP_409_CONFLICT,
+        )
+
+    try:
+        content = RAW_RETAIL_DEMO_FIXTURE_PATH.read_bytes()
+    except OSError as exc:
+        raise _fixture_validation_error() from exc
+
+    csv = validate_csv_content(
+        RAW_RETAIL_DEMO_FILE_NAME,
+        content,
+        limits.max_upload_file_size_mb,
+    )
+    if not csv.file.valid:
+        raise _fixture_validation_error()
+
+    _ensure_external_readiness(config)
+
+    dataset, dataset_file = _load_dataset_from_csv(
+        db=db,
+        session_id=session.id,
+        csv=csv,
+        dataset_name=RAW_RETAIL_DEMO_NAME,
+        source_type=RAW_RETAIL_DEMO_SOURCE_TYPE,
+        content_type="text/csv",
+        storage_group="raw-demo",
+        config=config,
+    )
+
+    session.demo_dataset_used += 1
+
+    db.commit()
+    db.refresh(dataset)
+    db.refresh(dataset_file)
+
+    return _response_from_dataset(
+        response_status="uploaded",
+        dataset=dataset,
+        dataset_file=dataset_file,
     )
 
 

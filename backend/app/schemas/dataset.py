@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-DatasetSourceType = Literal["uploaded_csv", "demo_raw_retail_later"]
+DatasetSourceType = Literal["uploaded_csv", "demo_raw_retail"]
 DatasetStatus = Literal["schema_review", "warehouse_loaded", "failed", "deleted"]
 DetectedColumnType = Literal[
     "date",
@@ -61,7 +61,8 @@ class DatasetListResponse(BaseModel):
 
 
 class DatasetUploadResponse(BaseModel):
-    status: Literal["uploaded"]
+    status: Literal["uploaded", "already_exists"]
+    message: str | None = None
     dataset: DatasetSummary
     file: DatasetFileSummary
     schema_preview: SchemaPreview

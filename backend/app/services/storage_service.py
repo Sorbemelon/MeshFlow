@@ -27,10 +27,23 @@ def build_storage_key(
     session_id: str,
     dataset_id: str,
     file_name: str,
+    storage_group: str = "raw",
     config: Settings = settings,
 ) -> str:
     prefix = config.s3_upload_prefix.strip().strip("/")
-    parts = [part for part in [prefix, "sessions", session_id, "raw", dataset_id, _safe_file_name(file_name)] if part]
+    safe_group = re.sub(r"[^A-Za-z0-9._-]+", "_", storage_group.strip()) or "raw"
+    parts = [
+        part
+        for part in [
+            prefix,
+            "sessions",
+            session_id,
+            safe_group,
+            dataset_id,
+            _safe_file_name(file_name),
+        ]
+        if part
+    ]
     return "/".join(parts)
 
 
@@ -41,6 +54,7 @@ def upload_csv_to_s3(
     file_name: str,
     content: bytes,
     content_type: str | None,
+    storage_group: str = "raw",
     config: Settings = settings,
 ) -> StorageUploadResult:
     bucket = config.configured_s3_bucket
@@ -55,7 +69,7 @@ def upload_csv_to_s3(
             "boto3 is not installed. Install backend requirements before uploading to S3."
         ) from exc
 
-    key = build_storage_key(session_id, dataset_id, file_name, config)
+    key = build_storage_key(session_id, dataset_id, file_name, storage_group, config)
 
     try:
         client = boto3.client(

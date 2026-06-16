@@ -76,7 +76,7 @@ export type DatasetStatus =
 export type DatasetSummary = {
   id: string;
   name: string;
-  source_type: "uploaded_csv" | "demo_raw_retail_later";
+  source_type: "uploaded_csv" | "demo_raw_retail";
   status: DatasetStatus;
   row_count: number;
   column_count: number;
@@ -121,7 +121,8 @@ export type DatasetDetailResponse = {
 };
 
 export type DatasetUploadResponse = {
-  status: "uploaded";
+  status: "uploaded" | "already_exists";
+  message: string | null;
   dataset: DatasetSummary;
   file: DatasetFileSummary;
   schema_preview: SchemaPreview;
@@ -345,6 +346,15 @@ export function uploadDataset(
     method: "POST",
     sessionId,
     body: formData,
+  });
+}
+
+export function createRawRetailDemoDataset(
+  sessionId: string,
+): Promise<DatasetUploadResponse> {
+  return request<DatasetUploadResponse>("/datasets/demo-retail", {
+    method: "POST",
+    sessionId,
   });
 }
 

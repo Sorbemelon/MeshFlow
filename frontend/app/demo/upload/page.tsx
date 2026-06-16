@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import {
+  createRawRetailDemoDataset,
   isSessionInvalidError,
   MeshFlowApiError,
   uploadDataset,
@@ -95,7 +96,7 @@ function readinessBadge(check: ReadinessCheck) {
 export default function UploadPage() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const { limits, refresh, sessionId } = useWorkspaceSession();
+  const { limits, refresh, sessionId, workspace } = useWorkspaceSession();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [checkState, setCheckState] = useState<UploadCheckState>("idle");
   const [frontendErrors, setFrontendErrors] = useState<string[]>([]);
@@ -103,8 +104,13 @@ export default function UploadPage() {
   const [requestError, setRequestError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<DatasetUploadResponse | null>(null);
+  const [isAddingDemo, setIsAddingDemo] = useState(false);
+  const [demoRequestError, setDemoRequestError] = useState<string | null>(null);
 
   const fileLimitMb = limits?.max_upload_file_size_mb ?? 5;
+  const demoDataset =
+    workspace?.datasets.find((dataset) => dataset.source_type === "demo_raw_retail") ??
+    null;
 
   async function runPreflight(file: File) {
     if (!sessionId) {
@@ -186,6 +192,33 @@ export default function UploadPage() {
     }
   }
 
+  async function handleUseDemoDataset() {
+    if (!sessionId || isAddingDemo || demoDataset) {
+      return;
+    }
+
+    setIsAddingDemo(true);
+    setDemoRequestError(null);
+
+    try {
+      const response = await createRawRetailDemoDataset(sessionId);
+      await refresh();
+      router.push(response.next_route);
+    } catch (caught) {
+      if (isSessionInvalidError(caught)) {
+        void refresh();
+      }
+
+      setDemoRequestError(
+        caught instanceof MeshFlowApiError
+          ? caught.details.message
+          : "MeshFlow could not prepare the Raw Retail Transactions Demo.",
+      );
+    } finally {
+      setIsAddingDemo(false);
+    }
+  }
+
   const uploadButtonLabel =
     isUploading
       ? "Uploading..."
@@ -236,17 +269,60 @@ export default function UploadPage() {
                 into a Dimensional Model and Data Marts — once per session.
               </p>
             </div>
-            <StatusBadge status="waiting" label="Not added" className="shrink-0 mt-0.5" />
+            <StatusBadge
+              status={demoDataset ? "ready" : isAddingDemo ? "running" : "waiting"}
+              label={
+                demoDataset
+                  ? "Added"
+                  : isAddingDemo
+                    ? "Preparing"
+                    : "Not added"
+              }
+              className="shrink-0 mt-0.5"
+            />
           </div>
 
           <Button
             className="mt-4"
             size="sm"
-            disabled
-            title="Demo dataset creation runs after the upload workflow is connected. Nothing is added yet."
+            disabled={!sessionId || isAddingDemo || Boolean(demoDataset)}
+            onClick={handleUseDemoDataset}
+            title={
+              !sessionId
+                ? "Available once a demo session is active."
+                : demoDataset
+                ? "The Raw Retail Transactions Demo has already been added to this session."
+                : "Upload the curated raw retail CSV to S3 and load it into Snowflake Warehouse Raw."
+            }
           >
-            Use Demo Dataset
+            {isAddingDemo ? (
+              <svg
+                width={14}
+                height={14}
+                viewBox="0 0 20 20"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                aria-hidden
+                className="animate-spin"
+              >
+                <path d="M16 5.5A7 7 0 1 0 17 10" />
+                <path d="M16 3v3h-3" />
+              </svg>
+            ) : null}
+            {demoDataset
+              ? "Demo Dataset Added"
+              : isAddingDemo
+                ? "Preparing demo dataset..."
+                : "Use Demo Dataset"}
           </Button>
+
+          {demoRequestError ? (
+            <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {demoRequestError}
+            </div>
+          ) : null}
 
           {/* Divider */}
           <hr className="my-5 border-border" />

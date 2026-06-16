@@ -284,7 +284,7 @@ function DataFlowContent() {
                     Schema Preview
                   </h2>
                   <p className="mt-1 text-sm text-ink-muted">
-                    Real deterministic profile from the uploaded CSV loaded into Snowflake Warehouse Raw.
+                    Real deterministic profile from the raw CSV loaded into Snowflake Warehouse Raw.
                   </p>
                 </div>
                 <StatusBadge status="review" label="Schema review" />
