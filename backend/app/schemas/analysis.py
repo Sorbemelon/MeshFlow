@@ -18,6 +18,8 @@ AnalysisDecisionType = Literal[
     "reuse_existing",
     "needs_user_confirmation",
 ]
+ChartType = Literal["kpi", "line", "bar", "horizontal_bar", "table"]
+ChartGenerationStatus = Literal["not_started", "completed", "failed"]
 
 
 class AnalysisRunCreateRequest(BaseModel):
@@ -62,8 +64,27 @@ class AnalysisRunDetail(AnalysisRunSummary):
     provider_runs: list[ProviderRunSummary]
 
 
+class AnalysisRunChartSummary(BaseModel):
+    id: str
+    analysis_run_id: str
+    dataset_id: str
+    chart_type: ChartType
+    title: str
+    description: str | None = None
+    chart_spec: dict[str, Any]
+    data: list[dict[str, Any]]
+    source_model: str | None = None
+    metric_summary: str | None = None
+    dimension_summary: str | None = None
+    sort_order: int
+    created_at: str
+
+
 class AnalysisRunResponse(BaseModel):
     analysis_run: AnalysisRunDetail
+    charts: list[AnalysisRunChartSummary] = Field(default_factory=list)
+    chart_generation_status: ChartGenerationStatus = "not_started"
+    chart_generation_message: str | None = None
     reused: bool = False
 
 

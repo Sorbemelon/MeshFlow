@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, settings
 from app.core.errors import AppError
@@ -99,6 +99,7 @@ def analysis_history_summary(run: AnalysisRun) -> dict[str, object]:
         "status": run.status,
         "decision_type": run.decision_type,
         "source_model": run.source_model,
+        "chart_count": len(run.charts),
         "row_count": run.row_count,
         "error_code": run.error_code,
         "failed_step": run.failed_step,
@@ -289,6 +290,7 @@ def get_workspace_response(
     analysis_runs = db.scalars(
         select(AnalysisRun)
         .where(AnalysisRun.demo_session_id == session.id)
+        .options(selectinload(AnalysisRun.charts))
         .order_by(AnalysisRun.created_at.desc())
         .limit(10)
     ).all()

@@ -171,6 +171,100 @@ export type ProviderRunSummary = {
   created_at: string;
 };
 
+export type ChartType = "kpi" | "line" | "bar" | "horizontal_bar" | "table";
+export type ChartGenerationStatus = "not_started" | "completed" | "failed";
+
+export type ChartFieldSpec = {
+  field: string;
+  label: string;
+  semantic_type?: "time" | "category" | string;
+  format?: "currency" | "percent" | string | null;
+};
+
+export type ChartSpec = {
+  type: ChartType;
+  title: string;
+  source_model?: string | null;
+  grain?: string | null;
+  tags?: string[];
+  value?: ChartFieldSpec;
+  x?: ChartFieldSpec;
+  y?: ChartFieldSpec;
+  columns?: ChartFieldSpec[];
+};
+
+export type AnalysisRunStatus =
+  | "planning"
+  | "validating"
+  | "running"
+  | "completed"
+  | "failed"
+  | "reused";
+
+export type AnalysisDecisionType =
+  | "create_new"
+  | "reuse_existing"
+  | "needs_user_confirmation";
+
+export type AnalysisRunSummary = {
+  id: string;
+  demo_session_id: string;
+  dataset_id: string;
+  question: string;
+  normalized_question: string;
+  status: AnalysisRunStatus;
+  decision_type: AnalysisDecisionType;
+  intent: string | null;
+  source_model: string | null;
+  grain: string | null;
+  metrics: Record<string, unknown>[];
+  dimensions: string[];
+  filters: Record<string, unknown>[];
+  row_count: number | null;
+  error_code: string | null;
+  failed_step: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type AnalysisRunDetail = AnalysisRunSummary & {
+  generated_sql: string | null;
+  output_schema: Record<string, unknown>[];
+  preview_rows: Record<string, unknown>[];
+  provider_chain: Record<string, unknown>[];
+  provider_runs: ProviderRunSummary[];
+};
+
+export type AnalysisRunChartSummary = {
+  id: string;
+  analysis_run_id: string;
+  dataset_id: string;
+  chart_type: ChartType;
+  title: string;
+  description: string | null;
+  chart_spec: ChartSpec;
+  data: Record<string, unknown>[];
+  source_model: string | null;
+  metric_summary: string | null;
+  dimension_summary: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type AnalysisRunResponse = {
+  analysis_run: AnalysisRunDetail;
+  charts: AnalysisRunChartSummary[];
+  chart_generation_status: ChartGenerationStatus;
+  chart_generation_message: string | null;
+  reused: boolean;
+};
+
+export type AnalysisRunListResponse = {
+  analysis_runs: AnalysisRunSummary[];
+};
+
 export type SemanticPreparationResponse = {
   status: SemanticPreparationStatus;
   message: string;
@@ -570,6 +664,42 @@ export function updateSemanticColumnMappings(
     method: "PATCH",
     sessionId,
     json: { columns },
+  });
+}
+
+export function createAnalysisRun(
+  sessionId: string,
+  input: {
+    attached_dataset_id: string;
+    question: string;
+    force_new?: boolean;
+  },
+): Promise<AnalysisRunResponse> {
+  return request<AnalysisRunResponse>("/analysis-runs", {
+    method: "POST",
+    sessionId,
+    json: {
+      attached_dataset_id: input.attached_dataset_id,
+      question: input.question,
+      force_new: input.force_new ?? false,
+    },
+  });
+}
+
+export function listAnalysisRuns(
+  sessionId: string,
+  datasetId?: string,
+): Promise<AnalysisRunListResponse> {
+  const query = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : "";
+  return request<AnalysisRunListResponse>(`/analysis-runs${query}`, { sessionId });
+}
+
+export function getAnalysisRun(
+  sessionId: string,
+  analysisRunId: string,
+): Promise<AnalysisRunResponse> {
+  return request<AnalysisRunResponse>(`/analysis-runs/${analysisRunId}`, {
+    sessionId,
   });
 }
 

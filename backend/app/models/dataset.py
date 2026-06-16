@@ -41,6 +41,10 @@ def generate_analysis_run_id() -> str:
     return f"an_run_{uuid4().hex}"
 
 
+def generate_analysis_run_chart_id() -> str:
+    return f"an_chart_{uuid4().hex}"
+
+
 def generate_transformation_run_id() -> str:
     return f"tf_run_{uuid4().hex}"
 
@@ -354,6 +358,47 @@ class AnalysisRun(Base):
         cascade="all, delete-orphan",
         order_by="AiProviderRun.created_at",
     )
+    charts: Mapped[list[AnalysisRunChart]] = relationship(
+        back_populates="analysis_run",
+        cascade="all, delete-orphan",
+        order_by="AnalysisRunChart.sort_order",
+    )
+
+
+class AnalysisRunChart(Base):
+    __tablename__ = "analysis_run_charts"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_analysis_run_chart_id,
+    )
+    analysis_run_id: Mapped[str] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chart_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    chart_spec_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    data_json: Mapped[list[dict[str, object]]] = mapped_column(JSON, nullable=False)
+    source_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    metric_summary: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    dimension_summary: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    analysis_run: Mapped[AnalysisRun] = relationship(back_populates="charts")
 
 
 class AiProviderRun(Base):

@@ -23,6 +23,7 @@ from app.schemas.analysis import (
 )
 from app.schemas.dataset import ProviderRunSummary
 from app.services import snowflake_service
+from app.services.chartspec_service import ChartSpecError, chart_summary, store_analysis_charts
 from app.services.dataset_service import RAW_RETAIL_DEMO_SOURCE_TYPE
 from app.services.demo_session_service import configured_limits, get_required_session
 from app.services.semantic_preparation_service import (
@@ -167,6 +168,37 @@ def _analysis_detail(
     )
 
 
+def _ensure_chart_summaries(
+    db: Session,
+    run: AnalysisRun,
+) -> tuple[list[dict[str, Any]], str, str | None]:
+    if run.status != "completed":
+        return [], "not_started", None
+    if not run.charts:
+        try:
+            store_analysis_charts(db, run)
+        except ChartSpecError as exc:
+            return [], "failed", str(exc)
+    return [chart_summary(chart) for chart in run.charts], "completed", None
+
+
+def _analysis_response(
+    db: Session,
+    run: AnalysisRun,
+    *,
+    reused: bool,
+    decision_type_override: str | None = None,
+) -> AnalysisRunResponse:
+    charts, chart_status, chart_message = _ensure_chart_summaries(db, run)
+    return AnalysisRunResponse(
+        analysis_run=_analysis_detail(run, decision_type_override=decision_type_override),
+        charts=charts,
+        chart_generation_status=chart_status,
+        chart_generation_message=chart_message,
+        reused=reused,
+    )
+
+
 def _load_analysis_run_for_session(
     db: Session,
     session_id: str | None,
@@ -176,7 +208,7 @@ def _load_analysis_run_for_session(
     run = db.scalar(
         select(AnalysisRun)
         .where(AnalysisRun.id == analysis_run_id, AnalysisRun.demo_session_id == session.id)
-        .options(selectinload(AnalysisRun.provider_runs))
+        .options(selectinload(AnalysisRun.provider_runs), selectinload(AnalysisRun.charts))
     )
     if run is None:
         raise AppError(
@@ -299,6 +331,7 @@ def _find_reusable_run(
             AnalysisRun.status == "completed",
         )
         .options(selectinload(AnalysisRun.provider_runs))
+        .options(selectinload(AnalysisRun.charts))
         .order_by(AnalysisRun.completed_at.desc())
     )
 
@@ -730,13 +763,14 @@ def create_analysis_run(
             normalized_question=normalized_question,
         )
         if reusable is not None:
-            return AnalysisRunResponse(
-                analysis_run=_analysis_detail(
-                    reusable,
-                    decision_type_override="reuse_existing",
-                ),
+            response = _analysis_response(
+                db,
+                reusable,
                 reused=True,
+                decision_type_override="reuse_existing",
             )
+            db.commit()
+            return response
 
     limits = configured_limits(config)
     if session.successful_analysis_runs_used >= limits.max_successful_analysis_runs_per_session:
@@ -825,9 +859,16 @@ def create_analysis_run(
     analysis_run.status = "completed"
     analysis_run.completed_at = model_utc_now()
     session.successful_analysis_runs_used += 1
+    charts, chart_status, chart_message = _ensure_chart_summaries(db, analysis_run)
     db.commit()
     db.refresh(analysis_run)
-    return AnalysisRunResponse(analysis_run=_analysis_detail(analysis_run), reused=False)
+    return AnalysisRunResponse(
+        analysis_run=_analysis_detail(analysis_run),
+        charts=charts,
+        chart_generation_status=chart_status,
+        chart_generation_message=chart_message,
+        reused=False,
+    )
 
 
 def list_analysis_runs(
@@ -849,4 +890,6 @@ def get_analysis_run_detail(
     analysis_run_id: str,
 ) -> AnalysisRunResponse:
     run = _load_analysis_run_for_session(db, session_id, analysis_run_id)
-    return AnalysisRunResponse(analysis_run=_analysis_detail(run), reused=False)
+    response = _analysis_response(db, run, reused=False)
+    db.commit()
+    return response
