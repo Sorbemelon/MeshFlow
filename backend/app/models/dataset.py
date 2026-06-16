@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -35,6 +35,22 @@ def generate_question_suggestion_id() -> str:
 
 def generate_provider_run_id() -> str:
     return f"ai_run_{uuid4().hex}"
+
+
+def generate_transformation_run_id() -> str:
+    return f"tf_run_{uuid4().hex}"
+
+
+def generate_dbt_artifact_id() -> str:
+    return f"dbt_art_{uuid4().hex}"
+
+
+def generate_data_flow_node_id() -> str:
+    return f"flow_node_{uuid4().hex}"
+
+
+def generate_data_flow_edge_id() -> str:
+    return f"flow_edge_{uuid4().hex}"
 
 
 class Dataset(Base):
@@ -94,6 +110,26 @@ class Dataset(Base):
         back_populates="dataset",
         cascade="all, delete-orphan",
         order_by="AiProviderRun.created_at",
+    )
+    transformation_runs: Mapped[list[DatasetTransformationRun]] = relationship(
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        order_by="DatasetTransformationRun.created_at",
+    )
+    dbt_artifacts: Mapped[list[DbtArtifact]] = relationship(
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        order_by="DbtArtifact.created_at",
+    )
+    data_flow_nodes: Mapped[list[DataFlowNode]] = relationship(
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        order_by="DataFlowNode.created_at",
+    )
+    data_flow_edges: Mapped[list[DataFlowEdge]] = relationship(
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        order_by="DataFlowEdge.created_at",
     )
 
 
@@ -273,3 +309,156 @@ class AiProviderRun(Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     dataset: Mapped[Dataset | None] = relationship(back_populates="provider_runs")
+
+
+class DatasetTransformationRun(Base):
+    __tablename__ = "dataset_transformation_runs"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_transformation_run_id,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failed_step: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    dbt_project_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    dbt_target_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    dbt_run_summary_json: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    dataset: Mapped[Dataset] = relationship(back_populates="transformation_runs")
+    artifacts: Mapped[list[DbtArtifact]] = relationship(
+        back_populates="transformation_run",
+        cascade="all, delete-orphan",
+    )
+
+
+class DbtArtifact(Base):
+    __tablename__ = "dbt_artifacts"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_dbt_artifact_id,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    transformation_run_id: Mapped[str] = mapped_column(
+        ForeignKey("dataset_transformation_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    artifact_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    layer: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_redacted: Mapped[str] = mapped_column(Text, nullable=False)
+    file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    dataset: Mapped[Dataset] = relationship(back_populates="dbt_artifacts")
+    transformation_run: Mapped[DatasetTransformationRun] = relationship(
+        back_populates="artifacts",
+    )
+
+
+class DataFlowNode(Base):
+    __tablename__ = "data_flow_nodes"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_data_flow_node_id,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    node_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    metadata_json: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    dataset: Mapped[Dataset] = relationship(back_populates="data_flow_nodes")
+    outgoing_edges: Mapped[list[DataFlowEdge]] = relationship(
+        back_populates="from_node",
+        cascade="all, delete-orphan",
+        foreign_keys="DataFlowEdge.from_node_id",
+    )
+    incoming_edges: Mapped[list[DataFlowEdge]] = relationship(
+        back_populates="to_node",
+        cascade="all, delete-orphan",
+        foreign_keys="DataFlowEdge.to_node_id",
+    )
+
+
+class DataFlowEdge(Base):
+    __tablename__ = "data_flow_edges"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_data_flow_edge_id,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    from_node_id: Mapped[str] = mapped_column(
+        ForeignKey("data_flow_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    to_node_id: Mapped[str] = mapped_column(
+        ForeignKey("data_flow_nodes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    edge_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    dataset: Mapped[Dataset] = relationship(back_populates="data_flow_edges")
+    from_node: Mapped[DataFlowNode] = relationship(
+        back_populates="outgoing_edges",
+        foreign_keys=[from_node_id],
+    )
+    to_node: Mapped[DataFlowNode] = relationship(
+        back_populates="incoming_edges",
+        foreign_keys=[to_node_id],
+    )

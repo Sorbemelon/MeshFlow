@@ -8,10 +8,13 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import { cn } from "@/lib/cn";
 import {
+  getDatasetDataFlow,
   getDataset,
   MeshFlowApiError,
   runSemanticPreparation,
+  transformDataset,
   updateSemanticColumnMappings,
+  type DatasetDataFlowResponse,
   type DatasetDetailResponse,
   type DatasetSummary,
   type SemanticColumnSummary,
@@ -49,6 +52,8 @@ type MappingDraft = {
   include_in_model: boolean;
 };
 
+type StageState = "Completed" | "Not Started" | "Waiting" | "Running" | "Failed";
+
 const ip = {
   width: 20,
   height: 20,
@@ -65,13 +70,43 @@ function datasetLabel(dataset: DatasetSummary): string {
   return dataset.name || dataset.id;
 }
 
-function stageState(stage: string, dataset: DatasetSummary | null): "Completed" | "Not Started" {
+function stageState(
+  stage: string,
+  dataset: DatasetSummary | null,
+  dataFlow: DatasetDataFlowResponse | null,
+  transformRunning: boolean,
+): StageState {
   if (!dataset) {
     return "Not Started";
   }
 
+  const node = dataFlow?.nodes.find((candidate) => candidate.label === stage);
+  if (node) {
+    if (node.status === "completed") {
+      return "Completed";
+    }
+    if (node.status === "running") {
+      return "Running";
+    }
+    if (node.status === "waiting") {
+      return "Waiting";
+    }
+    if (node.status === "failed") {
+      return "Failed";
+    }
+    return "Not Started";
+  }
+
+  if (dataset.status === "ready_for_analysis") {
+    return "Completed";
+  }
+
   if (stage === "Raw Input" || stage === "Warehouse Raw") {
     return "Completed";
+  }
+
+  if (transformRunning) {
+    return stage === "Staging" ? "Running" : "Waiting";
   }
 
   return "Not Started";
@@ -115,16 +150,20 @@ function buildMappingDrafts(detail: DatasetDetailResponse): Record<string, Mappi
 
 function DataFlowContent() {
   const searchParams = useSearchParams();
-  const { sessionId, workspace } = useWorkspaceSession();
+  const { refresh, sessionId, workspace } = useWorkspaceSession();
   const datasets = useMemo(() => workspace?.datasets ?? [], [workspace?.datasets]);
   const [manualDatasetId, setManualDatasetId] = useState("");
   const [datasetDetail, setDatasetDetail] = useState<DatasetDetailResponse | null>(null);
+  const [dataFlow, setDataFlow] = useState<DatasetDataFlowResponse | null>(null);
   const [detailState, setDetailState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
   const [semanticActionState, setSemanticActionState] = useState<
     "idle" | "generating" | "saving"
   >("idle");
   const [semanticActionMessage, setSemanticActionMessage] = useState<string | null>(null);
+  const [transformActionState, setTransformActionState] = useState<"idle" | "running">("idle");
+  const [transformMessage, setTransformMessage] = useState<string | null>(null);
+  const [transformNextRoute, setTransformNextRoute] = useState<string | null>(null);
   const [mappingDrafts, setMappingDrafts] = useState<Record<string, MappingDraft>>({});
   const queryDatasetId = searchParams.get("datasetId") ?? "";
   const selectedDatasetId = useMemo(() => {
@@ -152,6 +191,9 @@ function DataFlowContent() {
   const hasDataset = datasets.length > 0;
   const semanticPreparation = activeDatasetDetail?.semantic_preparation ?? null;
   const semanticStatus = semanticPreparation?.status ?? "not_started";
+  const isReadyForAnalysis = selectedDataset?.status === "ready_for_analysis";
+  const semanticMappingsReady =
+    (activeDatasetDetail?.semantic_preparation.semantic_columns.length ?? 0) > 0;
   const canGenerateSemantic =
     Boolean(activeDatasetDetail) &&
     semanticActionState === "idle" &&
@@ -161,6 +203,12 @@ function DataFlowContent() {
     semanticActionState === "idle" &&
     semanticStatus === "completed";
   const canSaveMappings = Boolean(activeDatasetDetail) && semanticActionState === "idle";
+  const canTransform =
+    Boolean(activeDatasetDetail) &&
+    semanticMappingsReady &&
+    !isReadyForAnalysis &&
+    semanticActionState === "idle" &&
+    transformActionState === "idle";
   const semanticByProfileId = useMemo(() => {
     const pairs =
       activeDatasetDetail?.semantic_preparation.semantic_columns.map(
@@ -186,14 +234,21 @@ function DataFlowContent() {
 
       setDetailState("loading");
       setDetailError(null);
+      setDataFlow(null);
+      setTransformMessage(null);
+      setTransformNextRoute(null);
 
       try {
-        const response = await getDataset(activeDatasetId, activeSessionId);
+        const [response, flowResponse] = await Promise.all([
+          getDataset(activeDatasetId, activeSessionId),
+          getDatasetDataFlow(activeDatasetId, activeSessionId),
+        ]);
         if (cancelled) {
           return;
         }
 
         setDatasetDetail(response);
+        setDataFlow(flowResponse);
         setMappingDrafts(buildMappingDrafts(response));
         setDetailState("ready");
       } catch (caught) {
@@ -222,9 +277,9 @@ function DataFlowContent() {
       ...current,
       [columnProfileId]: {
         ...(current[columnProfileId] ?? {
-        approved_name: "",
-        approved_role: "unknown",
-        include_in_model: true,
+          approved_name: "",
+          approved_role: "unknown",
+          include_in_model: true,
         }),
         ...patch,
       },
@@ -290,7 +345,7 @@ function DataFlowContent() {
         setDatasetDetail(nextDetail);
         setMappingDrafts(buildMappingDrafts(nextDetail));
       }
-      setSemanticActionMessage("Schema mappings saved. Transformation remains disabled until the dbt phase.");
+      setSemanticActionMessage("Schema mappings saved for dbt transformation.");
     } catch (caught) {
       setSemanticActionMessage(
         caught instanceof MeshFlowApiError
@@ -299,6 +354,40 @@ function DataFlowContent() {
       );
     } finally {
       setSemanticActionState("idle");
+    }
+  }
+
+  async function handleTransform() {
+    if (!sessionId || !selectedDatasetId || !activeDatasetDetail || !canTransform) {
+      return;
+    }
+
+    setTransformActionState("running");
+    setTransformMessage(null);
+    setTransformNextRoute(null);
+
+    try {
+      const response = await transformDataset(selectedDatasetId, sessionId);
+      const [nextDetail, nextFlow] = await Promise.all([
+        getDataset(selectedDatasetId, sessionId),
+        getDatasetDataFlow(selectedDatasetId, sessionId),
+        refresh(),
+      ]);
+      setDatasetDetail(nextDetail);
+      setDataFlow(nextFlow);
+      setMappingDrafts(buildMappingDrafts(nextDetail));
+      setTransformNextRoute(response.next_route);
+      setTransformMessage("dbt transformation completed. Data Marts are ready for later analysis.");
+    } catch (caught) {
+      setTransformMessage(
+        caught instanceof MeshFlowApiError
+          ? `${caught.details.message}${
+              caught.details.next_action ? ` ${caught.details.next_action}` : ""
+            }`
+          : "dbt transformation could not reach the backend.",
+      );
+    } finally {
+      setTransformActionState("idle");
     }
   }
 
@@ -362,8 +451,15 @@ function DataFlowContent() {
             </h3>
             <ol className="space-y-1.5">
               {PREP_STAGES.map((stage) => {
-                const state = stageState(stage, selectedDataset);
+                const state = stageState(
+                  stage,
+                  selectedDataset,
+                  dataFlow,
+                  transformActionState === "running",
+                );
                 const completed = state === "Completed";
+                const running = state === "Running";
+                const failed = state === "Failed";
                 return (
                   <li
                     key={stage}
@@ -373,7 +469,13 @@ function DataFlowContent() {
                       aria-hidden
                       className={cn(
                         "h-2 w-2 shrink-0 rounded-full",
-                        completed ? "bg-status-success" : "bg-status-neutral/35",
+                        completed
+                          ? "bg-status-success"
+                          : running
+                            ? "bg-status-running"
+                            : failed
+                              ? "bg-status-danger"
+                              : "bg-status-neutral/35",
                       )}
                     />
                     <span className="whitespace-nowrap text-sm text-ink-soft">
@@ -407,7 +509,7 @@ function DataFlowContent() {
                   title={
                     active
                       ? "Schema preview is available after upload."
-                      : "Transformation starts in the next phase."
+                      : "dbt transformation evidence appears after Transform succeeds."
                   }
                   className={cn(
                     "-mb-px border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors duration-150",
@@ -448,7 +550,26 @@ function DataFlowContent() {
                     Real deterministic profile from the raw CSV loaded into Snowflake Warehouse Raw.
                   </p>
                 </div>
-                <StatusBadge status="review" label="Schema review" />
+                <StatusBadge
+                  status={
+                    transformActionState === "running"
+                      ? "running"
+                      : isReadyForAnalysis
+                        ? "ready"
+                        : selectedDataset?.status === "transform_failed"
+                          ? "failed"
+                          : "review"
+                  }
+                  label={
+                    transformActionState === "running"
+                      ? "Transforming"
+                      : isReadyForAnalysis
+                        ? "Ready for analysis"
+                        : selectedDataset?.status === "transform_failed"
+                          ? "Transform failed"
+                          : "Schema review"
+                  }
+                />
               </div>
 
               {detailState === "loading" ? (
@@ -724,19 +845,94 @@ function DataFlowContent() {
 
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface-muted px-3 py-2">
                     <p className="text-xs text-ink-muted">
-                      Transformation starts in the next phase. Staging, Intermediate,
-                      Dimensional Model, and Data Marts remain Not Started.
+                      Transform runs dbt against Snowflake. No dataset is marked ready unless
+                      dbt completes successfully.
                     </p>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={!canSaveMappings}
-                      onClick={() => void handleSaveMappings()}
-                      title="Save reviewed names and roles for the future dbt transformation phase."
-                    >
-                      {semanticActionState === "saving" ? "Saving..." : "Save mappings"}
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={!canSaveMappings}
+                        onClick={() => void handleSaveMappings()}
+                        title="Save reviewed names and roles for dbt transformation."
+                      >
+                        {semanticActionState === "saving" ? "Saving..." : "Save mappings"}
+                      </Button>
+                      {isReadyForAnalysis && transformNextRoute ? (
+                        <Button size="sm" href={transformNextRoute}>
+                          Open Dashboard
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          disabled={!canTransform}
+                          onClick={() => void handleTransform()}
+                          title={
+                            semanticMappingsReady
+                              ? "Run dbt on Snowflake to build Staging, Intermediate, Dimensional Model, and Data Marts."
+                              : "Generate or save semantic mappings before running dbt."
+                          }
+                        >
+                          {transformActionState === "running" ? "Transforming..." : "Transform"}
+                        </Button>
+                      )}
+                    </div>
                   </div>
+
+                  {transformMessage ? (
+                    <div
+                      className={cn(
+                        "mt-3 rounded-md border px-3 py-2 text-sm",
+                        isReadyForAnalysis
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          : "border-amber-200 bg-amber-50 text-amber-800",
+                      )}
+                    >
+                      {transformMessage}
+                    </div>
+                  ) : null}
+
+                  {dataFlow?.models && Object.keys(dataFlow.models).length > 0 ? (
+                    <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-ink">
+                          dbt transformation evidence
+                        </p>
+                        {dataFlow.transformation ? (
+                          <StatusBadge
+                            status={
+                              dataFlow.transformation.status === "completed"
+                                ? "ready"
+                                : dataFlow.transformation.status === "failed"
+                                  ? "failed"
+                                  : "running"
+                            }
+                            label={dataFlow.transformation.status.replaceAll("_", " ")}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {Object.entries(dataFlow.models).map(([layer, models]) => (
+                          <div
+                            key={layer}
+                            className="rounded-md border border-blue-100 bg-surface px-3 py-2"
+                          >
+                            <p className="text-xs font-semibold uppercase tracking-normal text-blue-700">
+                              {layer.replaceAll("_", " ")}
+                            </p>
+                            <p className="mt-1 font-mono text-xs leading-relaxed text-ink-soft">
+                              {models.length ? models.join(", ") : "No models recorded"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      {dataFlow.artifacts.length > 0 ? (
+                        <p className="mt-3 text-xs text-ink-muted">
+                          {dataFlow.artifacts.length} redacted dbt artifacts stored for review.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   {semanticPreparation?.suggested_questions.length ? (
                     <div className="mt-3 rounded-md border border-indigo-200 bg-indigo-50/40 px-3 py-3">

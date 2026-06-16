@@ -3,8 +3,11 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.schemas.dataset import (
+    DatasetDataFlowResponse,
     DatasetDetailResponse,
     DatasetListResponse,
+    DatasetTransformRequest,
+    DatasetTransformResponse,
     DatasetUploadResponse,
     SchemaPreview,
     SemanticColumnMappingPatchRequest,
@@ -19,6 +22,10 @@ from app.services.dataset_service import (
     get_dataset_profile,
     list_datasets,
     upload_dataset,
+)
+from app.services.dbt_transformation_service import (
+    get_dataset_data_flow,
+    transform_dataset,
 )
 from app.services.semantic_preparation_service import (
     get_semantic_preparation,
@@ -88,6 +95,39 @@ def patch_dataset_semantic_columns(
     db: Session = Depends(get_db),
 ) -> SemanticPreparationResponse:
     return update_semantic_column_mappings(db, demo_session_id, dataset_id, request)
+
+
+@router.get("/{dataset_id}/transformation", response_model=DatasetDataFlowResponse)
+def get_dataset_transformation(
+    dataset_id: str,
+    demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
+    db: Session = Depends(get_db),
+) -> DatasetDataFlowResponse:
+    return get_dataset_data_flow(db, demo_session_id, dataset_id)
+
+
+@router.get("/{dataset_id}/data-flow", response_model=DatasetDataFlowResponse)
+def get_dataset_flow(
+    dataset_id: str,
+    demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
+    db: Session = Depends(get_db),
+) -> DatasetDataFlowResponse:
+    return get_dataset_data_flow(db, demo_session_id, dataset_id)
+
+
+@router.post("/{dataset_id}/transform", response_model=DatasetTransformResponse)
+def run_dataset_transform(
+    dataset_id: str,
+    request: DatasetTransformRequest | None = None,
+    demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
+    db: Session = Depends(get_db),
+) -> DatasetTransformResponse:
+    return transform_dataset(
+        db,
+        demo_session_id,
+        dataset_id,
+        force=request.force if request else False,
+    )
 
 
 @router.post("/upload/preflight", response_model=UploadPreflightResponse)

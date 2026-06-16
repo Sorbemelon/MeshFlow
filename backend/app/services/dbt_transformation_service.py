@@ -1,0 +1,972 @@
+from __future__ import annotations
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+
+from fastapi import status
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from app.core.config import Settings, settings
+from app.core.errors import AppError
+from app.models.dataset import (
+    ColumnProfile,
+    DataFlowEdge,
+    DataFlowNode,
+    Dataset,
+    DatasetTransformationRun,
+    DbtArtifact,
+    SemanticColumn,
+)
+from app.schemas.dataset import (
+    DataFlowEdgeSummary,
+    DataFlowNodeSummary,
+    DatasetDataFlowResponse,
+    DatasetTransformResponse,
+    DatasetTransformationRunSummary,
+    DbtArtifactSummary,
+)
+from app.schemas.upload_preflight import ReadinessCheck
+from app.services import readiness_service, snowflake_service
+from app.services.dataset_service import RAW_RETAIL_DEMO_SOURCE_TYPE, dataset_summary
+from app.services.demo_session_service import get_required_session
+
+
+SAFE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+TRANSFORMATION_LAYERS = ["staging", "intermediate", "dimensional_model", "data_marts"]
+PREP_NODE_SPECS = [
+    ("raw_input", "Raw Input"),
+    ("warehouse_raw", "Warehouse Raw"),
+    ("staging", "Staging"),
+    ("intermediate", "Intermediate"),
+    ("dimensional_model", "Dimensional Model"),
+    ("data_mart", "Data Marts"),
+]
+RAW_RETAIL_MODELS = {
+    "staging": ["stg_retail_transactions"],
+    "intermediate": ["int_retail_sales_enriched"],
+    "dimensional_model": [
+        "fact_sales",
+        "dim_customer",
+        "dim_product",
+        "dim_store",
+        "dim_date",
+    ],
+    "data_marts": [
+        "mart_sales_performance",
+        "mart_product_performance",
+        "mart_customer_segments",
+        "mart_store_performance",
+    ],
+}
+
+
+class DbtExecutionError(Exception):
+    def __init__(
+        self,
+        *,
+        error_code: str,
+        failed_step: str,
+        message: str,
+        command_summary: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.error_code = error_code
+        self.failed_step = failed_step
+        self.message = message
+        self.command_summary = command_summary or {}
+
+
+@dataclass(frozen=True)
+class SemanticMapping:
+    profile: ColumnProfile
+    approved_name: str
+    approved_role: str
+
+
+@dataclass(frozen=True)
+class GeneratedDbtProject:
+    project_dir: Path
+    profiles_dir: Path
+    project_name: str
+    profile_name: str
+    models: dict[str, list[str]]
+    artifacts: list[tuple[str, str, str, str, Path | None]]
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _summary_from_run(run: DatasetTransformationRun) -> DatasetTransformationRunSummary:
+    return DatasetTransformationRunSummary(
+        id=run.id,
+        status=run.status,
+        started_at=run.started_at.isoformat(),
+        completed_at=run.completed_at.isoformat() if run.completed_at else None,
+        failed_step=run.failed_step,
+        error_code=run.error_code,
+        error_message=run.error_message,
+        dbt_project_path=run.dbt_project_path,
+        dbt_target_name=run.dbt_target_name,
+        dbt_run_summary=run.dbt_run_summary_json,
+    )
+
+
+def _artifact_summary(artifact: DbtArtifact) -> DbtArtifactSummary:
+    return DbtArtifactSummary(
+        id=artifact.id,
+        artifact_type=artifact.artifact_type,
+        layer=artifact.layer,
+        name=artifact.name,
+        content_redacted=artifact.content_redacted,
+        file_path=artifact.file_path,
+        created_at=artifact.created_at.isoformat(),
+    )
+
+
+def _node_summary(node: DataFlowNode) -> DataFlowNodeSummary:
+    return DataFlowNodeSummary(
+        id=node.id,
+        node_type=node.node_type,
+        name=node.name,
+        label=node.label,
+        status=node.status,
+        metadata=node.metadata_json,
+    )
+
+
+def _edge_summary(edge: DataFlowEdge) -> DataFlowEdgeSummary:
+    return DataFlowEdgeSummary(
+        id=edge.id,
+        from_node_id=edge.from_node_id,
+        to_node_id=edge.to_node_id,
+        edge_type=edge.edge_type,
+        metadata=edge.metadata_json,
+    )
+
+
+def _readiness_error(check: ReadinessCheck) -> AppError:
+    return AppError(
+        error_code="SNOWFLAKE_NOT_READY",
+        failed_step="snowflake_readiness",
+        message=check.message,
+        next_action=check.next_action,
+        status_code=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _load_dataset(
+    db: Session,
+    session_id: str | None,
+    dataset_id: str,
+) -> Dataset:
+    session = get_required_session(db, session_id)
+    dataset = db.scalar(
+        select(Dataset)
+        .where(
+            Dataset.id == dataset_id,
+            Dataset.demo_session_id == session.id,
+            Dataset.deleted_at.is_(None),
+        )
+        .options(
+            selectinload(Dataset.files),
+            selectinload(Dataset.column_profiles),
+            selectinload(Dataset.semantic_columns).selectinload(SemanticColumn.column_profile),
+            selectinload(Dataset.question_suggestions),
+            selectinload(Dataset.transformation_runs),
+            selectinload(Dataset.dbt_artifacts),
+            selectinload(Dataset.data_flow_nodes),
+            selectinload(Dataset.data_flow_edges),
+        )
+    )
+    if dataset is None:
+        raise AppError(
+            error_code="DATASET_NOT_FOUND",
+            failed_step="dataset",
+            message="The requested dataset was not found for this demo session.",
+            next_action="Select an available dataset from the workspace.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    return dataset
+
+
+def _ensure_transformable_dataset(dataset: Dataset) -> None:
+    if dataset.deleted_at is not None or dataset.status == "deleted":
+        raise AppError(
+            error_code="DATASET_NOT_FOUND",
+            failed_step="dataset",
+            message="The requested dataset was not found for this demo session.",
+            next_action="Select an available dataset from the workspace.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if not dataset.raw_table_name:
+        raise AppError(
+            error_code="DATASET_NOT_READY_FOR_TRANSFORM",
+            failed_step="warehouse_raw",
+            message="This dataset has no Warehouse Raw table to transform.",
+            next_action="Upload and load the dataset into Snowflake Warehouse Raw first.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    if not dataset.column_profiles:
+        raise AppError(
+            error_code="DATASET_NOT_READY_FOR_TRANSFORM",
+            failed_step="schema_profile",
+            message="This dataset has no schema profile to transform.",
+            next_action="Upload and profile the dataset before running dbt.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+def _effective_mappings(dataset: Dataset) -> list[SemanticMapping]:
+    mappings: list[SemanticMapping] = []
+    for semantic in dataset.semantic_columns:
+        if not semantic.include_in_model:
+            continue
+        approved_name = semantic.approved_name or semantic.suggested_name
+        approved_role = semantic.approved_role or semantic.semantic_role
+        if not SAFE_NAME_RE.fullmatch(approved_name):
+            continue
+        if approved_role == "unknown":
+            continue
+        mappings.append(
+            SemanticMapping(
+                profile=semantic.column_profile,
+                approved_name=approved_name,
+                approved_role=approved_role,
+            )
+        )
+    return mappings
+
+
+def _ensure_semantic_mappings(dataset: Dataset) -> list[SemanticMapping]:
+    mappings = _effective_mappings(dataset)
+    if not mappings:
+        raise AppError(
+            error_code="SEMANTIC_MAPPING_REQUIRED",
+            failed_step="semantic_mapping",
+            message="This dataset needs reviewed semantic mappings before dbt transformation.",
+            next_action="Generate AI suggestions or save manual schema mappings, then retry Transform.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+    return mappings
+
+
+def _ensure_uploaded_csv_support(dataset: Dataset, mappings: list[SemanticMapping]) -> None:
+    if dataset.source_type == RAW_RETAIL_DEMO_SOURCE_TYPE:
+        return
+
+    has_measure = any(
+        mapping.approved_role in {"measure_column", "metric_candidate"} for mapping in mappings
+    )
+    has_dimension = any(
+        mapping.approved_role in {"dimension", "date_time", "identifier"} for mapping in mappings
+    )
+    if not has_measure or not has_dimension:
+        raise AppError(
+            error_code="TRANSFORMATION_NEEDS_REVIEW",
+            failed_step="semantic_mapping",
+            message=(
+                "This uploaded CSV needs clearer semantic mappings before MeshFlow can build "
+                "Data Marts."
+            ),
+            next_action=(
+                "Review mappings so at least one measure and one dimension or date are included."
+            ),
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+def _ensure_snowflake_ready(config: Settings) -> None:
+    check = readiness_service.check_snowflake_readiness(config)
+    if check.status != "ready":
+        raise _readiness_error(check)
+
+
+def _dbt_executable() -> str:
+    script_name = "dbt.exe" if os.name == "nt" else "dbt"
+    adjacent = Path(sys.executable).with_name(script_name)
+    if adjacent.exists():
+        return str(adjacent)
+
+    discovered = shutil.which("dbt")
+    if discovered:
+        return discovered
+
+    raise DbtExecutionError(
+        error_code="DBT_DEPENDENCY_MISSING",
+        failed_step="dbt_dependency",
+        message="The dbt CLI is not installed in the active backend environment.",
+    )
+
+
+def _dbt_environment(config: Settings) -> dict[str, str]:
+    env = os.environ.copy()
+    for key, value in {
+        "SNOWFLAKE_ACCOUNT": config.snowflake_account,
+        "SNOWFLAKE_USER": config.snowflake_user,
+        "SNOWFLAKE_PASSWORD": config.snowflake_password,
+        "SNOWFLAKE_ROLE": config.snowflake_role,
+        "SNOWFLAKE_WAREHOUSE": config.snowflake_warehouse,
+        "SNOWFLAKE_DATABASE": config.snowflake_database,
+        "SNOWFLAKE_SCHEMA": config.snowflake_schema,
+    }.items():
+        if value is not None:
+            env[key] = value
+    return env
+
+
+def _redact(text: str, config: Settings) -> str:
+    redacted = text
+    secret_values = [
+        config.snowflake_password,
+        config.aws_secret_access_key,
+        config.openai_api_key,
+        config.gemini_api_key_1,
+        config.gemini_api_key_2,
+        config.gemini_api_key_3,
+    ]
+    for secret in secret_values:
+        if secret:
+            redacted = redacted.replace(secret, "[redacted]")
+    return redacted
+
+
+def _run_command(
+    args: list[str],
+    *,
+    project_dir: Path,
+    config: Settings,
+    failed_step: str,
+) -> dict[str, object]:
+    completed = subprocess.run(
+        args,
+        cwd=project_dir,
+        env=_dbt_environment(config),
+        capture_output=True,
+        text=True,
+        timeout=300,
+        check=False,
+    )
+    stdout = _redact(completed.stdout[-4000:], config)
+    stderr = _redact(completed.stderr[-4000:], config)
+    summary = {
+        "command": " ".join(args[:2]),
+        "returncode": completed.returncode,
+        "stdout_tail": stdout,
+        "stderr_tail": stderr,
+    }
+    if completed.returncode != 0:
+        raise DbtExecutionError(
+            error_code="DBT_RUN_FAILED",
+            failed_step=failed_step,
+            message="dbt could not build the Data Marts for this dataset.",
+            command_summary=summary,
+        )
+    return summary
+
+
+def run_dbt_commands(
+    *,
+    project_dir: Path,
+    profiles_dir: Path,
+    target_name: str,
+    config: Settings = settings,
+) -> dict[str, object]:
+    dbt = _dbt_executable()
+    common_args = [
+        "--project-dir",
+        str(project_dir),
+        "--profiles-dir",
+        str(profiles_dir),
+        "--target",
+        target_name,
+    ]
+    debug_summary = _run_command(
+        [dbt, "debug", *common_args],
+        project_dir=project_dir,
+        config=config,
+        failed_step="dbt_debug",
+    )
+    run_summary = _run_command(
+        [dbt, "run", *common_args],
+        project_dir=project_dir,
+        config=config,
+        failed_step="data_marts",
+    )
+    return {"debug": debug_summary, "run": run_summary}
+
+
+def _write_file(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content.strip() + "\n", encoding="utf-8")
+
+
+def _profile_yml(profile_name: str, target_name: str, threads: int) -> str:
+    return f"""
+{profile_name}:
+  target: {target_name}
+  outputs:
+    {target_name}:
+      type: snowflake
+      account: "{{{{ env_var('SNOWFLAKE_ACCOUNT') }}}}"
+      user: "{{{{ env_var('SNOWFLAKE_USER') }}}}"
+      password: "{{{{ env_var('SNOWFLAKE_PASSWORD') }}}}"
+      role: "{{{{ env_var('SNOWFLAKE_ROLE') }}}}"
+      warehouse: "{{{{ env_var('SNOWFLAKE_WAREHOUSE') }}}}"
+      database: "{{{{ env_var('SNOWFLAKE_DATABASE') }}}}"
+      schema: "{{{{ env_var('SNOWFLAKE_SCHEMA') }}}}"
+      threads: {threads}
+      client_session_keep_alive: false
+"""
+
+
+def _project_yml(project_name: str, profile_name: str) -> str:
+    return f"""
+name: {project_name}
+version: "1.0.0"
+config-version: 2
+profile: {profile_name}
+
+models:
+  {project_name}:
+    +materialized: table
+"""
+
+
+def _schema_yml(models: dict[str, list[str]]) -> str:
+    model_lines = []
+    for layer_models in models.values():
+        for model_name in layer_models:
+            model_lines.append(f"  - name: {model_name}")
+    return "version: 2\n\nmodels:\n" + "\n".join(model_lines)
+
+
+def _raw_relation(dataset: Dataset) -> str:
+    return snowflake_service.quote_identifier(dataset.raw_table_name)
+
+
+def _retail_sql(raw_relation: str) -> dict[str, str]:
+    return {
+        "models/staging/stg_retail_transactions.sql": f"""
+select
+  nullif(trim("ORDER_ID"), '') as order_id,
+  nullif(trim("ORDER_LINE_ID"), '') as order_line_id,
+  try_to_date("ORDER_DATE") as order_date,
+  nullif(trim("CUSTOMER_ID"), '') as customer_id,
+  nullif(trim("CUSTOMER_NAME"), '') as customer_name,
+  nullif(trim("CUSTOMER_SEGMENT"), '') as customer_segment,
+  nullif(trim("PRODUCT_ID"), '') as product_id,
+  nullif(trim("PRODUCT_NAME"), '') as product_name,
+  nullif(trim("PRODUCT_CATEGORY"), '') as product_category,
+  nullif(trim("STORE_ID"), '') as store_id,
+  nullif(trim("STORE_NAME"), '') as store_name,
+  nullif(trim("STORE_REGION"), '') as store_region,
+  try_to_number("QUANTITY") as quantity,
+  try_to_decimal("UNIT_PRICE", 18, 2) as unit_price,
+  try_to_decimal("DISCOUNT_AMOUNT", 18, 2) as discount_amount,
+  try_to_decimal("REVENUE", 18, 2) as revenue,
+  try_to_decimal("COST", 18, 2) as cost,
+  nullif(trim("PAYMENT_METHOD"), '') as payment_method
+from {raw_relation}
+""",
+        "models/intermediate/int_retail_sales_enriched.sql": """
+select
+  *,
+  date_trunc('month', order_date)::date as order_month,
+  coalesce(revenue, quantity * unit_price - coalesce(discount_amount, 0)) as net_revenue,
+  coalesce(revenue, quantity * unit_price - coalesce(discount_amount, 0)) - coalesce(cost, 0) as gross_margin
+from {{ ref('stg_retail_transactions') }}
+""",
+        "models/dimensional/dim_customer.sql": """
+select distinct
+  customer_id,
+  customer_name,
+  customer_segment
+from {{ ref('int_retail_sales_enriched') }}
+where customer_id is not null
+""",
+        "models/dimensional/dim_product.sql": """
+select distinct
+  product_id,
+  product_name,
+  product_category
+from {{ ref('int_retail_sales_enriched') }}
+where product_id is not null
+""",
+        "models/dimensional/dim_store.sql": """
+select distinct
+  store_id,
+  store_name,
+  store_region
+from {{ ref('int_retail_sales_enriched') }}
+where store_id is not null
+""",
+        "models/dimensional/dim_date.sql": """
+select distinct
+  order_date,
+  order_month,
+  extract(year from order_date) as order_year,
+  extract(month from order_date) as order_month_number
+from {{ ref('int_retail_sales_enriched') }}
+where order_date is not null
+""",
+        "models/dimensional/fact_sales.sql": """
+select
+  order_line_id,
+  order_id,
+  order_date,
+  customer_id,
+  product_id,
+  store_id,
+  payment_method,
+  quantity,
+  unit_price,
+  discount_amount,
+  net_revenue,
+  cost,
+  gross_margin
+from {{ ref('int_retail_sales_enriched') }}
+""",
+        "models/marts/mart_sales_performance.sql": """
+select
+  order_month,
+  count(distinct order_id) as orders,
+  sum(quantity) as quantity,
+  sum(net_revenue) as revenue,
+  sum(gross_margin) as gross_margin
+from {{ ref('fact_sales') }}
+group by 1
+""",
+        "models/marts/mart_product_performance.sql": """
+select
+  p.product_category,
+  p.product_name,
+  sum(f.quantity) as quantity,
+  sum(f.net_revenue) as revenue,
+  sum(f.gross_margin) as gross_margin
+from {{ ref('fact_sales') }} f
+left join {{ ref('dim_product') }} p on f.product_id = p.product_id
+group by 1, 2
+""",
+        "models/marts/mart_customer_segments.sql": """
+select
+  c.customer_segment,
+  count(distinct f.order_id) as orders,
+  sum(f.net_revenue) as revenue,
+  sum(f.net_revenue) / nullif(count(distinct f.order_id), 0) as average_order_value
+from {{ ref('fact_sales') }} f
+left join {{ ref('dim_customer') }} c on f.customer_id = c.customer_id
+group by 1
+""",
+        "models/marts/mart_store_performance.sql": """
+select
+  s.store_region,
+  s.store_name,
+  count(distinct f.order_id) as orders,
+  sum(f.net_revenue) as revenue
+from {{ ref('fact_sales') }} f
+left join {{ ref('dim_store') }} s on f.store_id = s.store_id
+group by 1, 2
+""",
+    }
+
+
+def _generic_models(mappings: list[SemanticMapping]) -> dict[str, list[str]]:
+    return {
+        "staging": ["stg_uploaded"],
+        "intermediate": ["int_uploaded_enriched"],
+        "dimensional_model": ["fact_uploaded_records"],
+        "data_marts": ["mart_uploaded_overview"],
+    }
+
+
+def _generic_sql(dataset: Dataset, mappings: list[SemanticMapping]) -> dict[str, str]:
+    raw_relation = _raw_relation(dataset)
+    select_lines = [
+        f"  nullif(trim({snowflake_service.quote_identifier(mapping.profile.snowflake_column_name)}), '') "
+        f"as {mapping.approved_name}"
+        for mapping in mappings
+    ]
+    measure = next(
+        mapping for mapping in mappings if mapping.approved_role in {"measure_column", "metric_candidate"}
+    )
+    dimension = next(
+        mapping for mapping in mappings if mapping.approved_role in {"dimension", "date_time", "identifier"}
+    )
+    return {
+        "models/staging/stg_uploaded.sql": (
+            "select\n"
+            + ",\n".join(select_lines)
+            + f"\nfrom {raw_relation}"
+        ),
+        "models/intermediate/int_uploaded_enriched.sql": """
+select *
+from {{ ref('stg_uploaded') }}
+""",
+        "models/dimensional/fact_uploaded_records.sql": """
+select *
+from {{ ref('int_uploaded_enriched') }}
+""",
+        "models/marts/mart_uploaded_overview.sql": f"""
+select
+  {dimension.approved_name} as grouping_value,
+  count(*) as row_count,
+  sum(try_to_decimal({measure.approved_name}, 18, 2)) as total_{measure.approved_name}
+from {{{{ ref('fact_uploaded_records') }}}}
+group by 1
+""",
+    }
+
+
+def _generated_project(
+    *,
+    dataset: Dataset,
+    transformation_run: DatasetTransformationRun,
+    mappings: list[SemanticMapping],
+    config: Settings,
+) -> GeneratedDbtProject:
+    project_name = f"meshflow_{re.sub(r'[^A-Za-z0-9_]+', '_', dataset.id).lower()}"
+    profile_name = f"{project_name}_profile"
+    project_dir = Path(config.dbt_projects_dir) / dataset.id / transformation_run.id
+    profiles_dir = project_dir / "profiles"
+
+    if dataset.source_type == RAW_RETAIL_DEMO_SOURCE_TYPE:
+        models = RAW_RETAIL_MODELS
+        sql_files = _retail_sql(_raw_relation(dataset))
+    else:
+        models = _generic_models(mappings)
+        sql_files = _generic_sql(dataset, mappings)
+
+    project_yml = _project_yml(project_name, profile_name)
+    profiles_yml = _profile_yml(profile_name, config.dbt_target_name, config.dbt_threads)
+    schema_yml = _schema_yml(models)
+
+    files: list[tuple[str, str, str, str, Path | None]] = []
+    project_file = project_dir / "dbt_project.yml"
+    profile_file = profiles_dir / "profiles.yml"
+    schema_file = project_dir / "models/schema.yml"
+    _write_file(project_file, project_yml)
+    _write_file(profile_file, profiles_yml)
+    _write_file(schema_file, schema_yml)
+    files.append(("project_yml", "project", "dbt_project.yml", project_yml, project_file))
+    files.append(("profiles_yml_redacted", "project", "profiles.yml", profiles_yml, profile_file))
+    files.append(("schema_yml", "project", "schema.yml", schema_yml, schema_file))
+
+    for relative_path, content in sql_files.items():
+        file_path = project_dir / relative_path
+        _write_file(file_path, content)
+        layer = relative_path.split("/")[1]
+        files.append(("model_sql", layer, file_path.stem, content, file_path))
+
+    return GeneratedDbtProject(
+        project_dir=project_dir,
+        profiles_dir=profiles_dir,
+        project_name=project_name,
+        profile_name=profile_name,
+        models=models,
+        artifacts=files,
+    )
+
+
+def _store_generated_artifacts(
+    *,
+    db: Session,
+    dataset: Dataset,
+    transformation_run: DatasetTransformationRun,
+    project: GeneratedDbtProject,
+    config: Settings,
+) -> None:
+    for artifact_type, layer, name, content, file_path in project.artifacts:
+        db.add(
+            DbtArtifact(
+                dataset=dataset,
+                transformation_run=transformation_run,
+                artifact_type=artifact_type,
+                layer=layer,
+                name=name,
+                content_redacted=_redact(content, config),
+                file_path=str(file_path) if file_path else None,
+            )
+        )
+
+
+def _clear_previous_data_flow(db: Session, dataset: Dataset) -> None:
+    for edge in list(dataset.data_flow_edges):
+        db.delete(edge)
+    for node in list(dataset.data_flow_nodes):
+        db.delete(node)
+
+
+def _store_data_flow(
+    *,
+    db: Session,
+    dataset: Dataset,
+    models: dict[str, list[str]],
+) -> None:
+    nodes: list[DataFlowNode] = []
+    for node_type, label in PREP_NODE_SPECS:
+        layer_key = "data_marts" if node_type == "data_mart" else node_type
+        model_names = models.get(layer_key, [])
+        node = DataFlowNode(
+            dataset=dataset,
+            node_type=node_type,
+            name=node_type,
+            label=label,
+            status="completed",
+            metadata_json={"models": model_names} if model_names else None,
+        )
+        db.add(node)
+        nodes.append(node)
+
+    db.flush()
+    for from_node, to_node in zip(nodes, nodes[1:], strict=False):
+        db.add(
+            DataFlowEdge(
+                dataset=dataset,
+                from_node=from_node,
+                to_node=to_node,
+                edge_type="prepares",
+                metadata_json=None,
+            )
+        )
+
+
+def _store_run_result_artifact(
+    *,
+    db: Session,
+    dataset: Dataset,
+    transformation_run: DatasetTransformationRun,
+    summary: dict[str, object],
+) -> None:
+    db.add(
+        DbtArtifact(
+            dataset=dataset,
+            transformation_run=transformation_run,
+            artifact_type="run_result_summary",
+            layer="project",
+            name="dbt_run_summary",
+            content_redacted=str(summary),
+            file_path=None,
+        )
+    )
+
+
+def _completed_transform_response(
+    dataset: Dataset,
+    transformation_run: DatasetTransformationRun,
+    models: dict[str, list[str]],
+) -> DatasetTransformResponse:
+    return DatasetTransformResponse(
+        status="completed",
+        dataset=dataset_summary(dataset),
+        transformation_run=_summary_from_run(transformation_run),
+        layers_completed=TRANSFORMATION_LAYERS,
+        models=models,
+        next_route="/demo/dashboard",
+    )
+
+
+def transform_dataset(
+    db: Session,
+    session_id: str | None,
+    dataset_id: str,
+    *,
+    force: bool = False,
+    config: Settings = settings,
+) -> DatasetTransformResponse:
+    dataset = _load_dataset(db, session_id, dataset_id)
+    _ensure_transformable_dataset(dataset)
+
+    latest_success = next(
+        (
+            run
+            for run in reversed(dataset.transformation_runs)
+            if run.status == "completed" and run.dbt_run_summary_json
+        ),
+        None,
+    )
+    if dataset.status == "ready_for_analysis" and latest_success is not None and not force:
+        return _completed_transform_response(
+            dataset,
+            latest_success,
+            latest_success.dbt_run_summary_json.get("models", {}) if latest_success.dbt_run_summary_json else {},
+        )
+
+    mappings = _ensure_semantic_mappings(dataset)
+    _ensure_uploaded_csv_support(dataset, mappings)
+
+    transformation_run = DatasetTransformationRun(
+        dataset=dataset,
+        status="running",
+        started_at=utc_now(),
+        dbt_target_name=config.dbt_target_name,
+    )
+    dataset.status = "transforming"
+    db.add(transformation_run)
+    db.commit()
+    db.refresh(dataset)
+    db.refresh(transformation_run)
+
+    try:
+        _ensure_snowflake_ready(config)
+        project = _generated_project(
+            dataset=dataset,
+            transformation_run=transformation_run,
+            mappings=mappings,
+            config=config,
+        )
+        transformation_run.dbt_project_path = str(project.project_dir)
+        _store_generated_artifacts(
+            db=db,
+            dataset=dataset,
+            transformation_run=transformation_run,
+            project=project,
+            config=config,
+        )
+        command_summary = run_dbt_commands(
+            project_dir=project.project_dir,
+            profiles_dir=project.profiles_dir,
+            target_name=config.dbt_target_name,
+            config=config,
+        )
+        transformation_run.status = "completed"
+        transformation_run.completed_at = utc_now()
+        transformation_run.dbt_run_summary_json = {
+            "models": project.models,
+            "commands": command_summary,
+        }
+        dataset.status = "ready_for_analysis"
+        _clear_previous_data_flow(db, dataset)
+        _store_data_flow(db=db, dataset=dataset, models=project.models)
+        _store_run_result_artifact(
+            db=db,
+            dataset=dataset,
+            transformation_run=transformation_run,
+            summary=transformation_run.dbt_run_summary_json,
+        )
+        db.commit()
+        db.refresh(dataset)
+        db.refresh(transformation_run)
+        return _completed_transform_response(dataset, transformation_run, project.models)
+    except AppError as exc:
+        transformation_run.status = "failed"
+        transformation_run.completed_at = utc_now()
+        transformation_run.failed_step = exc.failed_step
+        transformation_run.error_code = exc.error_code
+        transformation_run.error_message = exc.message
+        transformation_run.dbt_run_summary_json = {"error": exc.error_code}
+        dataset.status = "transform_failed"
+        db.commit()
+        raise
+    except DbtExecutionError as exc:
+        transformation_run.status = "failed"
+        transformation_run.completed_at = utc_now()
+        transformation_run.failed_step = exc.failed_step
+        transformation_run.error_code = exc.error_code
+        transformation_run.error_message = exc.message
+        transformation_run.dbt_run_summary_json = exc.command_summary
+        dataset.status = "transform_failed"
+        db.commit()
+        raise AppError(
+            error_code=exc.error_code,
+            failed_step=exc.failed_step,
+            message=exc.message,
+            next_action="Review dbt setup, schema mappings, and run evidence, then retry Transform.",
+            status_code=status.HTTP_502_BAD_GATEWAY,
+        ) from exc
+    except OSError as exc:
+        transformation_run.status = "failed"
+        transformation_run.completed_at = utc_now()
+        transformation_run.failed_step = "dbt_project_generation"
+        transformation_run.error_code = "DBT_PROJECT_GENERATION_FAILED"
+        transformation_run.error_message = "MeshFlow could not generate the dbt project files."
+        transformation_run.dbt_run_summary_json = {"error": "DBT_PROJECT_GENERATION_FAILED"}
+        dataset.status = "transform_failed"
+        db.commit()
+        raise AppError(
+            error_code="DBT_PROJECT_GENERATION_FAILED",
+            failed_step="dbt_project_generation",
+            message="MeshFlow could not generate the dbt project files.",
+            next_action="Check backend local runtime directory permissions, then retry.",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        ) from exc
+
+
+def _synthetic_data_flow(dataset: Dataset) -> tuple[list[DataFlowNodeSummary], list[DataFlowEdgeSummary]]:
+    if dataset.status == "ready_for_analysis":
+        statuses = ["completed"] * len(PREP_NODE_SPECS)
+    elif dataset.status == "transforming":
+        statuses = ["completed", "completed", "running", "waiting", "waiting", "waiting"]
+    else:
+        statuses = ["completed", "completed", "not_started", "not_started", "not_started", "not_started"]
+
+    nodes = [
+        DataFlowNodeSummary(
+            id=f"{dataset.id}:{node_type}",
+            node_type=node_type,
+            name=node_type,
+            label=label,
+            status=node_status,
+            metadata=None,
+        )
+        for (node_type, label), node_status in zip(PREP_NODE_SPECS, statuses, strict=True)
+    ]
+    edges = [
+        DataFlowEdgeSummary(
+            id=f"{nodes[index].id}->{nodes[index + 1].id}",
+            from_node_id=nodes[index].id,
+            to_node_id=nodes[index + 1].id,
+            edge_type="prepares",
+            metadata=None,
+        )
+        for index in range(len(nodes) - 1)
+    ]
+    return nodes, edges
+
+
+def _models_from_run(run: DatasetTransformationRun | None) -> dict[str, list[str]]:
+    if not run or not run.dbt_run_summary_json:
+        return {}
+    models = run.dbt_run_summary_json.get("models")
+    if not isinstance(models, dict):
+        return {}
+    return {
+        str(layer): [str(model) for model in model_list]
+        for layer, model_list in models.items()
+        if isinstance(model_list, list)
+    }
+
+
+def get_dataset_data_flow(
+    db: Session,
+    session_id: str | None,
+    dataset_id: str,
+) -> DatasetDataFlowResponse:
+    dataset = _load_dataset(db, session_id, dataset_id)
+    latest_run = dataset.transformation_runs[-1] if dataset.transformation_runs else None
+    latest_run_artifacts = [
+        artifact
+        for artifact in dataset.dbt_artifacts
+        if latest_run and artifact.transformation_run_id == latest_run.id
+    ]
+    if dataset.data_flow_nodes:
+        nodes = [_node_summary(node) for node in dataset.data_flow_nodes]
+        edges = [_edge_summary(edge) for edge in dataset.data_flow_edges]
+    else:
+        nodes, edges = _synthetic_data_flow(dataset)
+
+    return DatasetDataFlowResponse(
+        dataset=dataset_summary(dataset),
+        transformation=_summary_from_run(latest_run) if latest_run else None,
+        nodes=nodes,
+        edges=edges,
+        artifacts=[_artifact_summary(artifact) for artifact in latest_run_artifacts],
+        models=_models_from_run(latest_run),
+    )

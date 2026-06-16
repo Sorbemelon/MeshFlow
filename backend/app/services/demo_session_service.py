@@ -267,11 +267,14 @@ def get_workspace_response(
         .where(Dataset.demo_session_id == session.id, Dataset.deleted_at.is_(None))
         .order_by(Dataset.created_at.desc())
     ).all()
+    ready_datasets = [
+        dataset for dataset in datasets if dataset.status == "ready_for_analysis"
+    ]
 
     return WorkspaceResponse(
         session=summary_from_session(session, config),
         datasets=[dataset_summary(dataset) for dataset in datasets],
-        ready_datasets=[],
+        ready_datasets=[dataset_summary(dataset) for dataset in ready_datasets],
         active_dataset=None,
         dashboard=DashboardSummary(
             dashboard_count=limits.dashboards_per_session,

@@ -70,6 +70,9 @@ export type WorkspaceSetupStatus = {
 export type DatasetStatus =
   | "schema_review"
   | "warehouse_loaded"
+  | "transforming"
+  | "ready_for_analysis"
+  | "transform_failed"
   | "failed"
   | "deleted";
 
@@ -182,6 +185,78 @@ export type DatasetDetailResponse = {
   file: DatasetFileSummary | null;
   schema_preview: SchemaPreview;
   semantic_preparation: SemanticPreparationResponse;
+};
+
+export type TransformationStatus =
+  | "not_started"
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type DataFlowNodeStatus =
+  | "not_started"
+  | "waiting"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type DatasetTransformationRunSummary = {
+  id: string;
+  status: TransformationStatus;
+  started_at: string;
+  completed_at: string | null;
+  failed_step: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  dbt_project_path: string | null;
+  dbt_target_name: string | null;
+  dbt_run_summary: Record<string, unknown> | null;
+};
+
+export type DbtArtifactSummary = {
+  id: string;
+  artifact_type: string;
+  layer: string;
+  name: string;
+  content_redacted: string;
+  file_path: string | null;
+  created_at: string;
+};
+
+export type DataFlowNodeSummary = {
+  id: string;
+  node_type: string;
+  name: string;
+  label: string;
+  status: DataFlowNodeStatus;
+  metadata: Record<string, unknown> | null;
+};
+
+export type DataFlowEdgeSummary = {
+  id: string;
+  from_node_id: string;
+  to_node_id: string;
+  edge_type: string;
+  metadata: Record<string, unknown> | null;
+};
+
+export type DatasetDataFlowResponse = {
+  dataset: DatasetSummary;
+  transformation: DatasetTransformationRunSummary | null;
+  nodes: DataFlowNodeSummary[];
+  edges: DataFlowEdgeSummary[];
+  artifacts: DbtArtifactSummary[];
+  models: Record<string, string[]>;
+};
+
+export type DatasetTransformResponse = {
+  status: "completed";
+  dataset: DatasetSummary;
+  transformation_run: DatasetTransformationRunSummary;
+  layers_completed: string[];
+  models: Record<string, string[]>;
+  next_route: string;
 };
 
 export type DatasetUploadResponse = {
@@ -433,6 +508,27 @@ export function getDataset(
   sessionId: string,
 ): Promise<DatasetDetailResponse> {
   return request<DatasetDetailResponse>(`/datasets/${datasetId}`, { sessionId });
+}
+
+export function getDatasetDataFlow(
+  datasetId: string,
+  sessionId: string,
+): Promise<DatasetDataFlowResponse> {
+  return request<DatasetDataFlowResponse>(`/datasets/${datasetId}/data-flow`, {
+    sessionId,
+  });
+}
+
+export function transformDataset(
+  datasetId: string,
+  sessionId: string,
+  force = false,
+): Promise<DatasetTransformResponse> {
+  return request<DatasetTransformResponse>(`/datasets/${datasetId}/transform`, {
+    method: "POST",
+    sessionId,
+    json: { force },
+  });
 }
 
 export function getSemanticPreparation(

@@ -71,6 +71,12 @@ class Settings(BaseSettings):
     snowflake_schema: str | None = Field(default=None, alias="SNOWFLAKE_SCHEMA")
     snowflake_stage_name: str | None = Field(default=None, alias="SNOWFLAKE_STAGE_NAME")
 
+    dbt_runtime_dir: str = Field(default="./.local/dbt", alias="DBT_RUNTIME_DIR")
+    dbt_projects_dir: str = Field(default="./.local/dbt_projects", alias="DBT_PROJECTS_DIR")
+    dbt_profiles_dir: str | None = Field(default=None, alias="DBT_PROFILES_DIR")
+    dbt_target_name: str = Field(default="dev", alias="DBT_TARGET_NAME")
+    dbt_threads: int = Field(default=1, alias="DBT_THREADS")
+
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: str | None = Field(default=None, alias="OPENAI_MODEL")
     gemini_api_key_1: str | None = Field(default=None, alias="GEMINI_API_KEY_1")

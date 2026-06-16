@@ -27,6 +27,10 @@ def _quote_identifier(value: str) -> str:
     return f'"{value.upper()}"'
 
 
+def quote_identifier(value: str) -> str:
+    return _quote_identifier(value)
+
+
 def _quote_qualified_name(value: str) -> str:
     return ".".join(_quote_identifier(part.strip()) for part in value.split(".") if part.strip())
 

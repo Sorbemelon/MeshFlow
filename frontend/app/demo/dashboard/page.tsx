@@ -1,6 +1,12 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
+import {
+  getDataset,
+  MeshFlowApiError,
+  type DatasetQuestionSuggestionSummary,
+} from "@/lib/meshflowApi";
 
 const ip = {
   width: 20,
@@ -29,10 +35,85 @@ function datasetLabel(dataset: Record<string, unknown>, index: number): string {
 }
 
 export default function DashboardPage() {
-  const { workspace } = useWorkspaceSession();
-  const readyDatasets = workspace?.ready_datasets ?? [];
-  const schemaReviewDatasets = workspace?.datasets ?? [];
+  const { sessionId, workspace } = useWorkspaceSession();
+  const readyDatasets = useMemo(
+    () => workspace?.ready_datasets ?? [],
+    [workspace?.ready_datasets],
+  );
+  const schemaReviewDatasets = useMemo(() => workspace?.datasets ?? [], [workspace?.datasets]);
   const hasReadyDataset = readyDatasets.length > 0;
+  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [questionState, setQuestionState] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle",
+  );
+  const [questionMessage, setQuestionMessage] = useState<string | null>(null);
+  const [suggestedQuestions, setSuggestedQuestions] = useState<
+    DatasetQuestionSuggestionSummary[]
+  >([]);
+
+  const activeDatasetId = useMemo(() => {
+    if (!readyDatasets.length) {
+      return "";
+    }
+    if (selectedDatasetId && readyDatasets.some((dataset) => dataset.id === selectedDatasetId)) {
+      return selectedDatasetId;
+    }
+    return readyDatasets[0].id;
+  }, [readyDatasets, selectedDatasetId]);
+
+  const selectedDataset = useMemo(
+    () => readyDatasets.find((dataset) => dataset.id === activeDatasetId) ?? null,
+    [activeDatasetId, readyDatasets],
+  );
+
+  const hasSchemaReviewDatasets = useMemo(
+    () => schemaReviewDatasets.length > 0,
+    [schemaReviewDatasets],
+  );
+
+  useEffect(() => {
+    if (!sessionId || !activeDatasetId) {
+      return;
+    }
+
+    let cancelled = false;
+    const activeSessionId = sessionId;
+    const requestedDatasetId = activeDatasetId;
+    async function loadQuestions() {
+      await Promise.resolve();
+      if (cancelled) {
+        return;
+      }
+
+      setQuestionState("loading");
+      setQuestionMessage(null);
+      try {
+        const detail = await getDataset(requestedDatasetId, activeSessionId);
+        if (cancelled) {
+          return;
+        }
+        setSuggestedQuestions(detail.semantic_preparation.suggested_questions);
+        setQuestionState("ready");
+      } catch (caught) {
+        if (cancelled) {
+          return;
+        }
+        setSuggestedQuestions([]);
+        setQuestionState("error");
+        setQuestionMessage(
+          caught instanceof MeshFlowApiError
+            ? caught.details.message
+            : "Prepared questions could not be loaded.",
+        );
+      }
+    }
+
+    void loadQuestions();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDatasetId, sessionId]);
 
   return (
     <div className="px-6 py-8">
@@ -96,7 +177,8 @@ export default function DashboardPage() {
           </label>
           <select
             disabled={!hasReadyDataset}
-            defaultValue=""
+            value={activeDatasetId}
+            onChange={(event) => setSelectedDatasetId(event.target.value)}
             aria-label="Attach dataset"
             className="mt-1.5 w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink-muted disabled:cursor-not-allowed disabled:bg-surface-muted"
           >
@@ -104,12 +186,17 @@ export default function DashboardPage() {
             {readyDatasets.map((dataset, index) => {
               const label = datasetLabel(dataset, index);
               return (
-                <option key={label} value={label}>
+                <option key={dataset.id} value={dataset.id}>
                   {label}
                 </option>
               );
             })}
           </select>
+          {selectedDataset ? (
+            <p className="mt-2 rounded-md border border-violet-200 bg-violet-50/40 px-3 py-2 font-mono text-xs text-violet-900">
+              {selectedDataset.raw_table_name}
+            </p>
+          ) : null}
 
           <label className="mt-4 block text-xs font-semibold text-ink">
             Question
@@ -122,11 +209,36 @@ export default function DashboardPage() {
 
           <div className="mt-4">
             <p className="text-xs font-semibold text-ink">Suggested questions</p>
-            <p className="mt-1.5 rounded-md bg-surface-muted px-3 py-2.5 text-xs text-ink-muted">
-              {schemaReviewDatasets.length > 0
-                ? "Prepared question suggestions can be reviewed in Data Flow after semantic preparation. Analysis stays disabled until Data Marts exist."
-                : "Suggestions appear after a dataset is loaded and semantic preparation succeeds."}
-            </p>
+            {questionState === "loading" ? (
+              <p className="mt-1.5 rounded-md bg-surface-muted px-3 py-2.5 text-xs text-ink-muted">
+                Loading prepared questions...
+              </p>
+            ) : null}
+            {questionState === "error" ? (
+              <p className="mt-1.5 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-xs text-red-700">
+                {questionMessage}
+              </p>
+            ) : null}
+            {questionState !== "loading" && questionState !== "error" ? (
+              suggestedQuestions.length > 0 ? (
+                <ul className="mt-1.5 grid gap-2">
+                  {suggestedQuestions.map((question) => (
+                    <li
+                      key={question.id}
+                      className="rounded-md border border-violet-100 bg-violet-50/40 px-3 py-2 text-xs text-ink-soft"
+                    >
+                      {question.question}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-1.5 rounded-md bg-surface-muted px-3 py-2.5 text-xs text-ink-muted">
+                  {hasSchemaReviewDatasets
+                    ? "No prepared questions are available for this ready dataset yet. Analysis stays disabled until the next phase."
+                    : "Suggestions appear after a dataset is loaded and semantic preparation succeeds."}
+                </p>
+              )
+            ) : null}
           </div>
 
           <button

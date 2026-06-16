@@ -4,7 +4,15 @@ from pydantic import BaseModel
 
 
 DatasetSourceType = Literal["uploaded_csv", "demo_raw_retail"]
-DatasetStatus = Literal["schema_review", "warehouse_loaded", "failed", "deleted"]
+DatasetStatus = Literal[
+    "schema_review",
+    "warehouse_loaded",
+    "transforming",
+    "ready_for_analysis",
+    "transform_failed",
+    "failed",
+    "deleted",
+]
 DetectedColumnType = Literal[
     "date",
     "integer",
@@ -23,6 +31,8 @@ SemanticRole = Literal[
     "unknown",
 ]
 SemanticPreparationStatus = Literal["not_started", "running", "completed", "failed"]
+TransformationStatus = Literal["not_started", "pending", "running", "completed", "failed"]
+DataFlowNodeStatus = Literal["not_started", "waiting", "running", "completed", "failed"]
 
 
 class ColumnProfileSummary(BaseModel):
@@ -113,6 +123,68 @@ class DatasetDetailResponse(BaseModel):
     file: DatasetFileSummary | None = None
     schema_preview: SchemaPreview
     semantic_preparation: SemanticPreparationResponse
+
+
+class DbtArtifactSummary(BaseModel):
+    id: str
+    artifact_type: str
+    layer: str
+    name: str
+    content_redacted: str
+    file_path: str | None = None
+    created_at: str
+
+
+class DatasetTransformationRunSummary(BaseModel):
+    id: str
+    status: TransformationStatus
+    started_at: str
+    completed_at: str | None = None
+    failed_step: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    dbt_project_path: str | None = None
+    dbt_target_name: str | None = None
+    dbt_run_summary: dict[str, object] | None = None
+
+
+class DataFlowNodeSummary(BaseModel):
+    id: str
+    node_type: str
+    name: str
+    label: str
+    status: DataFlowNodeStatus
+    metadata: dict[str, object] | None = None
+
+
+class DataFlowEdgeSummary(BaseModel):
+    id: str
+    from_node_id: str
+    to_node_id: str
+    edge_type: str
+    metadata: dict[str, object] | None = None
+
+
+class DatasetDataFlowResponse(BaseModel):
+    dataset: DatasetSummary
+    transformation: DatasetTransformationRunSummary | None = None
+    nodes: list[DataFlowNodeSummary]
+    edges: list[DataFlowEdgeSummary]
+    artifacts: list[DbtArtifactSummary]
+    models: dict[str, list[str]]
+
+
+class DatasetTransformRequest(BaseModel):
+    force: bool = False
+
+
+class DatasetTransformResponse(BaseModel):
+    status: Literal["completed"]
+    dataset: DatasetSummary
+    transformation_run: DatasetTransformationRunSummary
+    layers_completed: list[str]
+    models: dict[str, list[str]]
+    next_route: str
 
 
 class DatasetListResponse(BaseModel):
