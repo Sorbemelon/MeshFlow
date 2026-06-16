@@ -118,7 +118,7 @@ export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
     if (spec.type === "line") {
       return (
         <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={1}>
             <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 4 }}>
               <CartesianGrid stroke="#e2e8f0" vertical={false} />
               <XAxis dataKey={spec.x.field} {...commonAxisProps} />
@@ -141,7 +141,7 @@ export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
     if (spec.type === "horizontal_bar") {
       return (
         <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={1}>
             <BarChart
               data={data}
               layout="vertical"
@@ -165,7 +165,7 @@ export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
 
     return (
       <div className="h-72 w-full">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height="100%" minWidth={1}>
           <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 4 }}>
             <CartesianGrid stroke="#e2e8f0" vertical={false} />
             <XAxis dataKey={spec.x.field} {...commonAxisProps} />

@@ -528,7 +528,7 @@ export default function UploadPage() {
             >
               <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none" />
             </svg>
-            <h2 className="text-base font-semibold">Demo walkthrough</h2>
+            <h2 className="text-base font-semibold">Demo Walkthrough</h2>
           </div>
           <p className="mt-1 text-xs text-ink-muted">
             Five steps from raw file to validated chart.

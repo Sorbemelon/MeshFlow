@@ -954,8 +954,8 @@ function DataFlowContent() {
                       >
                         {semanticActionState === "saving" ? "Saving..." : "Save mappings"}
                       </Button>
-                      {isReadyForAnalysis && transformNextRoute ? (
-                        <Button size="sm" href={transformNextRoute}>
+                      {isReadyForAnalysis ? (
+                        <Button size="sm" href={transformNextRoute ?? "/demo/dashboard"}>
                           Open Dashboard
                         </Button>
                       ) : (
