@@ -38,6 +38,9 @@ from app.services.upload_preflight_service import (
     validate_csv_content,
     validate_upload_preflight,
 )
+from app.services.semantic_preparation_service import (
+    semantic_preparation_summary_from_dataset,
+)
 
 
 NULL_STRINGS = {"", "NULL", "null"}
@@ -53,6 +56,7 @@ RAW_RETAIL_DEMO_FIXTURE_PATH = (
 
 def _profile_summary(profile: ColumnProfile) -> ColumnProfileSummary:
     return ColumnProfileSummary(
+        id=profile.id,
         column_index=profile.column_index,
         raw_column_name=profile.raw_column_name,
         normalized_column_name=profile.normalized_column_name,
@@ -486,7 +490,13 @@ def get_dataset_detail(
             Dataset.demo_session_id == session.id,
             Dataset.deleted_at.is_(None),
         )
-        .options(selectinload(Dataset.files), selectinload(Dataset.column_profiles))
+        .options(
+            selectinload(Dataset.files),
+            selectinload(Dataset.column_profiles),
+            selectinload(Dataset.semantic_columns),
+            selectinload(Dataset.question_suggestions),
+            selectinload(Dataset.provider_runs),
+        )
     )
     if dataset is None:
         raise AppError(
@@ -502,6 +512,7 @@ def get_dataset_detail(
         dataset=dataset_summary(dataset),
         file=dataset_file_summary(dataset_file) if dataset_file else None,
         schema_preview=schema_preview_from_profiles(dataset.column_profiles),
+        semantic_preparation=semantic_preparation_summary_from_dataset(dataset),
     )
 
 

@@ -7,6 +7,9 @@ from app.schemas.dataset import (
     DatasetListResponse,
     DatasetUploadResponse,
     SchemaPreview,
+    SemanticColumnMappingPatchRequest,
+    SemanticPreparationResponse,
+    SemanticPreparationRunRequest,
 )
 from app.schemas.upload_preflight import UploadPreflightResponse
 from app.services.demo_session_service import DEMO_SESSION_HEADER
@@ -16,6 +19,11 @@ from app.services.dataset_service import (
     get_dataset_profile,
     list_datasets,
     upload_dataset,
+)
+from app.services.semantic_preparation_service import (
+    get_semantic_preparation,
+    run_semantic_preparation,
+    update_semantic_column_mappings,
 )
 from app.services.upload_preflight_service import run_upload_preflight
 
@@ -46,6 +54,40 @@ def get_profile(
     db: Session = Depends(get_db),
 ) -> SchemaPreview:
     return get_dataset_profile(db, demo_session_id, dataset_id)
+
+
+@router.get("/{dataset_id}/semantic-preparation", response_model=SemanticPreparationResponse)
+def get_dataset_semantic_preparation(
+    dataset_id: str,
+    demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
+    db: Session = Depends(get_db),
+) -> SemanticPreparationResponse:
+    return get_semantic_preparation(db, demo_session_id, dataset_id)
+
+
+@router.post("/{dataset_id}/semantic-preparation", response_model=SemanticPreparationResponse)
+def run_dataset_semantic_preparation(
+    dataset_id: str,
+    request: SemanticPreparationRunRequest | None = None,
+    demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
+    db: Session = Depends(get_db),
+) -> SemanticPreparationResponse:
+    return run_semantic_preparation(
+        db,
+        demo_session_id,
+        dataset_id,
+        force=request.force if request else False,
+    )
+
+
+@router.patch("/{dataset_id}/semantic-columns", response_model=SemanticPreparationResponse)
+def patch_dataset_semantic_columns(
+    dataset_id: str,
+    request: SemanticColumnMappingPatchRequest,
+    demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
+    db: Session = Depends(get_db),
+) -> SemanticPreparationResponse:
+    return update_semantic_column_mappings(db, demo_session_id, dataset_id, request)
 
 
 @router.post("/upload/preflight", response_model=UploadPreflightResponse)

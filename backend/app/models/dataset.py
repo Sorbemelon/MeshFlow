@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -23,6 +23,18 @@ def generate_dataset_file_id() -> str:
 
 def generate_column_profile_id() -> str:
     return f"col_{uuid4().hex}"
+
+
+def generate_semantic_column_id() -> str:
+    return f"sem_col_{uuid4().hex}"
+
+
+def generate_question_suggestion_id() -> str:
+    return f"qst_{uuid4().hex}"
+
+
+def generate_provider_run_id() -> str:
+    return f"ai_run_{uuid4().hex}"
 
 
 class Dataset(Base):
@@ -67,6 +79,21 @@ class Dataset(Base):
         back_populates="dataset",
         cascade="all, delete-orphan",
         order_by="ColumnProfile.column_index",
+    )
+    semantic_columns: Mapped[list[SemanticColumn]] = relationship(
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        order_by="SemanticColumn.raw_column_name",
+    )
+    question_suggestions: Mapped[list[DatasetQuestionSuggestion]] = relationship(
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        order_by="DatasetQuestionSuggestion.sort_order",
+    )
+    provider_runs: Mapped[list[AiProviderRun]] = relationship(
+        back_populates="dataset",
+        cascade="all, delete-orphan",
+        order_by="AiProviderRun.created_at",
     )
 
 
@@ -139,3 +166,110 @@ class ColumnProfile(Base):
 
     dataset: Mapped[Dataset] = relationship(back_populates="column_profiles")
     dataset_file: Mapped[DatasetFile | None] = relationship(back_populates="column_profiles")
+    semantic_columns: Mapped[list[SemanticColumn]] = relationship(
+        back_populates="column_profile",
+        cascade="all, delete-orphan",
+    )
+
+
+class SemanticColumn(Base):
+    __tablename__ = "semantic_columns"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_semantic_column_id,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    column_profile_id: Mapped[str] = mapped_column(
+        ForeignKey("column_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    raw_column_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    suggested_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    semantic_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    needs_review: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    reason: Mapped[str] = mapped_column(String(1024), nullable=False)
+    approved_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    approved_role: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    include_in_model: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    user_edited: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    provider_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    provider_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    dataset: Mapped[Dataset] = relationship(back_populates="semantic_columns")
+    column_profile: Mapped[ColumnProfile] = relationship(back_populates="semantic_columns")
+
+
+class DatasetQuestionSuggestion(Base):
+    __tablename__ = "dataset_question_suggestions"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_question_suggestion_id,
+    )
+    dataset_id: Mapped[str] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    question: Mapped[str] = mapped_column(String(255), nullable=False)
+    intent: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    provider_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+
+    dataset: Mapped[Dataset] = relationship(back_populates="question_suggestions")
+
+
+class AiProviderRun(Base):
+    __tablename__ = "ai_provider_runs"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_provider_run_id,
+    )
+    dataset_id: Mapped[str | None] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    task_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    provider_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    fallback_from_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    dataset: Mapped[Dataset | None] = relationship(back_populates="provider_runs")

@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
@@ -9,8 +10,12 @@ import { cn } from "@/lib/cn";
 import {
   getDataset,
   MeshFlowApiError,
+  runSemanticPreparation,
+  updateSemanticColumnMappings,
   type DatasetDetailResponse,
   type DatasetSummary,
+  type SemanticColumnSummary,
+  type SemanticRole,
 } from "@/lib/meshflowApi";
 
 const PREP_STAGES = [
@@ -28,6 +33,21 @@ const TABS = [
   "Transformations",
   "Dimensional Model & Data Marts",
 ];
+
+const SEMANTIC_ROLE_OPTIONS: SemanticRole[] = [
+  "identifier",
+  "date_time",
+  "measure_column",
+  "metric_candidate",
+  "dimension",
+  "unknown",
+];
+
+type MappingDraft = {
+  approved_name: string;
+  approved_role: SemanticRole;
+  include_in_model: boolean;
+};
 
 const ip = {
   width: 20,
@@ -61,6 +81,38 @@ function formatNullRate(value: number): string {
   return `${Math.round(value * 10000) / 100}%`;
 }
 
+function roleLabel(role: SemanticRole): string {
+  return role.replaceAll("_", " ");
+}
+
+function formatConfidence(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function buildMappingDrafts(detail: DatasetDetailResponse): Record<string, MappingDraft> {
+  const semanticByProfile = new Map(
+    detail.semantic_preparation.semantic_columns.map(
+      (semanticColumn) => [semanticColumn.column_profile_id, semanticColumn] as const,
+    ),
+  );
+
+  const drafts: Record<string, MappingDraft> = {};
+  for (const column of detail.schema_preview.columns) {
+    const semanticColumn = semanticByProfile.get(column.id);
+    drafts[column.id] = {
+      approved_name:
+        semanticColumn?.approved_name ??
+        semanticColumn?.suggested_name ??
+        column.normalized_column_name.toLowerCase(),
+      approved_role:
+        semanticColumn?.approved_role ?? semanticColumn?.semantic_role ?? "unknown",
+      include_in_model: semanticColumn?.include_in_model ?? true,
+    };
+  }
+
+  return drafts;
+}
+
 function DataFlowContent() {
   const searchParams = useSearchParams();
   const { sessionId, workspace } = useWorkspaceSession();
@@ -69,6 +121,11 @@ function DataFlowContent() {
   const [datasetDetail, setDatasetDetail] = useState<DatasetDetailResponse | null>(null);
   const [detailState, setDetailState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [semanticActionState, setSemanticActionState] = useState<
+    "idle" | "generating" | "saving"
+  >("idle");
+  const [semanticActionMessage, setSemanticActionMessage] = useState<string | null>(null);
+  const [mappingDrafts, setMappingDrafts] = useState<Record<string, MappingDraft>>({});
   const queryDatasetId = searchParams.get("datasetId") ?? "";
   const selectedDatasetId = useMemo(() => {
     if (datasets.length === 0) {
@@ -93,6 +150,24 @@ function DataFlowContent() {
     datasets.find((dataset) => dataset.id === selectedDatasetId) ??
     null;
   const hasDataset = datasets.length > 0;
+  const semanticPreparation = activeDatasetDetail?.semantic_preparation ?? null;
+  const semanticStatus = semanticPreparation?.status ?? "not_started";
+  const canGenerateSemantic =
+    Boolean(activeDatasetDetail) &&
+    semanticActionState === "idle" &&
+    semanticStatus === "not_started";
+  const canRefreshSemantic =
+    Boolean(activeDatasetDetail) &&
+    semanticActionState === "idle" &&
+    semanticStatus === "completed";
+  const canSaveMappings = Boolean(activeDatasetDetail) && semanticActionState === "idle";
+  const semanticByProfileId = useMemo(() => {
+    const pairs =
+      activeDatasetDetail?.semantic_preparation.semantic_columns.map(
+        (semanticColumn) => [semanticColumn.column_profile_id, semanticColumn] as const,
+      ) ?? [];
+    return new Map<string, SemanticColumnSummary>(pairs);
+  }, [activeDatasetDetail?.semantic_preparation.semantic_columns]);
 
   useEffect(() => {
     if (!sessionId || !selectedDatasetId) {
@@ -119,6 +194,7 @@ function DataFlowContent() {
         }
 
         setDatasetDetail(response);
+        setMappingDrafts(buildMappingDrafts(response));
         setDetailState("ready");
       } catch (caught) {
         if (cancelled) {
@@ -140,6 +216,91 @@ function DataFlowContent() {
       cancelled = true;
     };
   }, [selectedDatasetId, sessionId]);
+
+  function updateMappingDraft(columnProfileId: string, patch: Partial<MappingDraft>) {
+    setMappingDrafts((current) => ({
+      ...current,
+      [columnProfileId]: {
+        ...(current[columnProfileId] ?? {
+        approved_name: "",
+        approved_role: "unknown",
+        include_in_model: true,
+        }),
+        ...patch,
+      },
+    }));
+  }
+
+  async function handleSemanticPreparation(force = false) {
+    if (!sessionId || !selectedDatasetId || semanticActionState !== "idle") {
+      return;
+    }
+
+    setSemanticActionState("generating");
+    setSemanticActionMessage(null);
+
+    try {
+      const response = await runSemanticPreparation(selectedDatasetId, sessionId, force);
+      if (activeDatasetDetail?.dataset.id === selectedDatasetId) {
+        const nextDetail = {
+          ...activeDatasetDetail,
+          semantic_preparation: response,
+        };
+        setDatasetDetail(nextDetail);
+        setMappingDrafts(buildMappingDrafts(nextDetail));
+      }
+      setSemanticActionMessage(response.message);
+    } catch (caught) {
+      setSemanticActionMessage(
+        caught instanceof MeshFlowApiError
+          ? caught.details.message
+          : "Semantic preparation could not reach the backend.",
+      );
+    } finally {
+      setSemanticActionState("idle");
+    }
+  }
+
+  async function handleSaveMappings() {
+    if (!sessionId || !selectedDatasetId || !activeDatasetDetail || semanticActionState !== "idle") {
+      return;
+    }
+
+    setSemanticActionState("saving");
+    setSemanticActionMessage(null);
+
+    try {
+      const response = await updateSemanticColumnMappings(
+        selectedDatasetId,
+        sessionId,
+        activeDatasetDetail.schema_preview.columns.map((column) => ({
+          column_profile_id: column.id,
+          approved_name:
+            mappingDrafts[column.id]?.approved_name ??
+            column.normalized_column_name.toLowerCase(),
+          approved_role: mappingDrafts[column.id]?.approved_role ?? "unknown",
+          include_in_model: mappingDrafts[column.id]?.include_in_model ?? true,
+        })),
+      );
+      if (activeDatasetDetail?.dataset.id === selectedDatasetId) {
+        const nextDetail = {
+          ...activeDatasetDetail,
+          semantic_preparation: response,
+        };
+        setDatasetDetail(nextDetail);
+        setMappingDrafts(buildMappingDrafts(nextDetail));
+      }
+      setSemanticActionMessage("Schema mappings saved. Transformation remains disabled until the dbt phase.");
+    } catch (caught) {
+      setSemanticActionMessage(
+        caught instanceof MeshFlowApiError
+          ? caught.details.message
+          : "Schema mappings could not be saved.",
+      );
+    } finally {
+      setSemanticActionState("idle");
+    }
+  }
 
   return (
     <div className="px-6 py-8">
@@ -325,49 +486,280 @@ function DataFlowContent() {
                     </div>
                   </div>
 
+                  {semanticPreparation ? (
+                    <div
+                      className={cn(
+                        "mt-4 rounded-md border px-3 py-3",
+                        semanticStatus === "completed"
+                          ? "border-indigo-200 bg-indigo-50/45"
+                          : semanticStatus === "failed"
+                            ? "border-red-200 bg-red-50"
+                            : "border-border bg-surface-muted",
+                      )}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-semibold text-ink">
+                              Semantic preparation
+                            </p>
+                            <StatusBadge
+                              status={
+                                semanticActionState === "generating"
+                                  ? "running"
+                                  : semanticStatus === "completed"
+                                    ? "ai"
+                                    : semanticStatus === "failed"
+                                      ? "failed"
+                                      : "waiting"
+                              }
+                              label={
+                                semanticActionState === "generating"
+                                  ? "Generating"
+                                  : semanticStatus === "completed"
+                                    ? "Suggestions ready"
+                                    : semanticStatus === "failed"
+                                      ? "Unavailable"
+                                      : "Not started"
+                              }
+                            />
+                          </div>
+                          <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                            {semanticActionMessage ?? semanticPreparation.message}
+                          </p>
+                          {semanticPreparation.next_action ? (
+                            <p className="mt-1 text-xs text-ink-muted">
+                              {semanticPreparation.next_action}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          {canGenerateSemantic ? (
+                            <Button
+                              size="sm"
+                              onClick={() => void handleSemanticPreparation(false)}
+                              title="Ask the configured AI provider ladder for semantic suggestions."
+                            >
+                              Generate AI Suggestions
+                            </Button>
+                          ) : null}
+                          {semanticStatus === "failed" && semanticActionState === "idle" ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => void handleSemanticPreparation(true)}
+                              title="Retry the provider ladder. No fallback suggestions are invented."
+                            >
+                              Retry
+                            </Button>
+                          ) : null}
+                          {canRefreshSemantic ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => void handleSemanticPreparation(true)}
+                              title="Refresh suggestions with the configured AI provider ladder."
+                            >
+                              Refresh AI Suggestions
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {semanticPreparation.provider_runs.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {semanticPreparation.provider_runs.slice(-4).map((run) => (
+                            <span
+                              key={run.id}
+                              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-[0.6875rem] font-medium text-ink-muted"
+                            >
+                              {run.provider_name}
+                              <span className="font-mono text-ink">
+                                {run.status}
+                              </span>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <div className="mt-4 overflow-x-auto rounded-md border border-border">
-                    <table className="min-w-full divide-y divide-border text-left text-sm">
+                    <table className="min-w-[1180px] divide-y divide-border text-left text-sm">
                       <thead className="bg-surface-muted text-xs font-semibold text-ink-muted">
                         <tr>
                           <th className="px-3 py-2">Raw column</th>
-                          <th className="px-3 py-2">Snowflake column</th>
                           <th className="px-3 py-2">Detected type</th>
                           <th className="px-3 py-2">Null rate</th>
+                          <th className="px-3 py-2">Suggested name</th>
+                          <th className="px-3 py-2">Semantic role</th>
+                          <th className="px-3 py-2">Confidence</th>
+                          <th className="px-3 py-2">Review</th>
+                          <th className="px-3 py-2">Approved mapping</th>
                           <th className="px-3 py-2">Samples</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border bg-surface">
-                        {activeDatasetDetail.schema_preview.columns.map((column) => (
-                          <tr key={column.snowflake_column_name}>
-                            <td className="px-3 py-2 font-mono text-xs text-ink">
-                              {column.raw_column_name}
-                            </td>
-                            <td className="px-3 py-2 font-mono text-xs text-ink-soft">
-                              {column.snowflake_column_name}
-                            </td>
-                            <td className="px-3 py-2">
-                              <span className="rounded-full bg-primary-tint px-2 py-0.5 text-xs font-semibold text-primary">
-                                {column.detected_type}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 font-mono text-xs text-ink-soft">
-                              {formatNullRate(column.null_rate)}
-                            </td>
-                            <td className="max-w-[280px] px-3 py-2 font-mono text-xs text-ink-muted">
-                              {column.sample_values.length > 0
-                                ? column.sample_values.join(", ")
-                                : "No non-null sample"}
-                            </td>
-                          </tr>
-                        ))}
+                        {activeDatasetDetail.schema_preview.columns.map((column) => {
+                          const semanticColumn = semanticByProfileId.get(column.id);
+                          const draft = mappingDrafts[column.id];
+                          return (
+                            <tr
+                              key={column.id}
+                              className={cn(
+                                semanticColumn?.needs_review ? "bg-amber-50/35" : "",
+                              )}
+                            >
+                              <td className="px-3 py-2">
+                                <p className="font-mono text-xs text-ink">
+                                  {column.raw_column_name}
+                                </p>
+                                <p className="mt-0.5 font-mono text-[0.6875rem] text-ink-muted">
+                                  {column.snowflake_column_name}
+                                </p>
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className="rounded-full bg-primary-tint px-2 py-0.5 text-xs font-semibold text-primary">
+                                  {column.detected_type}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs text-ink-soft">
+                                {formatNullRate(column.null_rate)}
+                              </td>
+                              <td className="px-3 py-2">
+                                {semanticColumn ? (
+                                  <div>
+                                    <p className="font-mono text-xs text-ink">
+                                      {semanticColumn.suggested_name}
+                                    </p>
+                                    <p className="mt-1 max-w-[240px] text-xs leading-relaxed text-ink-muted">
+                                      {semanticColumn.reason}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <span className="text-xs text-ink-muted">
+                                    Not generated
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                {semanticColumn ? (
+                                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                                    {roleLabel(semanticColumn.semantic_role)}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-ink-muted">Unknown</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs text-ink-soft">
+                                {semanticColumn
+                                  ? formatConfidence(semanticColumn.confidence)
+                                  : "n/a"}
+                              </td>
+                              <td className="px-3 py-2">
+                                {semanticColumn?.needs_review ? (
+                                  <StatusBadge status="review" label="Needs review" />
+                                ) : semanticColumn ? (
+                                  <StatusBadge status="ready" label="Confident" />
+                                ) : (
+                                  <StatusBadge status="waiting" label="Pending" />
+                                )}
+                              </td>
+                              <td className="min-w-[260px] px-3 py-2">
+                                <div className="grid gap-2">
+                                  <input
+                                    value={draft?.approved_name ?? ""}
+                                    aria-label={`Approved name for ${column.raw_column_name}`}
+                                    onChange={(event) =>
+                                      updateMappingDraft(column.id, {
+                                        approved_name: event.target.value,
+                                      })
+                                    }
+                                    className="w-full rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-xs text-ink"
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <select
+                                      value={draft?.approved_role ?? "unknown"}
+                                      aria-label={`Approved role for ${column.raw_column_name}`}
+                                      onChange={(event) =>
+                                        updateMappingDraft(column.id, {
+                                          approved_role: event.target.value as SemanticRole,
+                                        })
+                                      }
+                                      className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-ink"
+                                    >
+                                      {SEMANTIC_ROLE_OPTIONS.map((role) => (
+                                        <option key={role} value={role}>
+                                          {roleLabel(role)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <label className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
+                                      <input
+                                        type="checkbox"
+                                        checked={draft?.include_in_model ?? true}
+                                        onChange={(event) =>
+                                          updateMappingDraft(column.id, {
+                                            include_in_model: event.target.checked,
+                                          })
+                                        }
+                                      />
+                                      Include
+                                    </label>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="max-w-[260px] px-3 py-2 font-mono text-xs text-ink-muted">
+                                {column.sample_values.length > 0
+                                  ? column.sample_values.join(", ")
+                                  : "No non-null sample"}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
 
-                  <p className="mt-3 rounded-md border border-border bg-surface-muted px-3 py-2 text-xs text-ink-muted">
-                    Transformation starts in the next phase. Staging, Intermediate,
-                    Dimensional Model, and Data Marts remain Not Started.
-                  </p>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-surface-muted px-3 py-2">
+                    <p className="text-xs text-ink-muted">
+                      Transformation starts in the next phase. Staging, Intermediate,
+                      Dimensional Model, and Data Marts remain Not Started.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={!canSaveMappings}
+                      onClick={() => void handleSaveMappings()}
+                      title="Save reviewed names and roles for the future dbt transformation phase."
+                    >
+                      {semanticActionState === "saving" ? "Saving..." : "Save mappings"}
+                    </Button>
+                  </div>
+
+                  {semanticPreparation?.suggested_questions.length ? (
+                    <div className="mt-3 rounded-md border border-indigo-200 bg-indigo-50/40 px-3 py-3">
+                      <p className="text-sm font-semibold text-ink">
+                        Prepared question suggestions
+                      </p>
+                      <ul className="mt-2 grid gap-2">
+                        {semanticPreparation.suggested_questions.map((question) => (
+                          <li
+                            key={question.id}
+                            className="rounded-md border border-indigo-100 bg-surface px-3 py-2 text-xs text-ink-soft"
+                          >
+                            {question.question}
+                            {question.intent ? (
+                              <span className="ml-2 font-mono text-[0.6875rem] text-indigo-600">
+                                {question.intent}
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </>
               ) : null}
             </div>

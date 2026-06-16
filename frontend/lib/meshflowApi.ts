@@ -85,6 +85,7 @@ export type DatasetSummary = {
 };
 
 export type ColumnProfileSummary = {
+  id: string;
   column_index: number;
   raw_column_name: string;
   normalized_column_name: string;
@@ -114,10 +115,73 @@ export type DatasetFileSummary = {
   checksum_sha256: string | null;
 };
 
+export type SemanticRole =
+  | "identifier"
+  | "date_time"
+  | "measure_column"
+  | "metric_candidate"
+  | "dimension"
+  | "unknown";
+
+export type SemanticPreparationStatus =
+  | "not_started"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type SemanticColumnSummary = {
+  id: string;
+  column_profile_id: string;
+  raw_column_name: string;
+  suggested_name: string;
+  semantic_role: SemanticRole;
+  confidence: number;
+  needs_review: boolean;
+  reason: string;
+  approved_name: string | null;
+  approved_role: SemanticRole | null;
+  include_in_model: boolean;
+  user_edited: boolean;
+  provider_name: string | null;
+  provider_model: string | null;
+};
+
+export type DatasetQuestionSuggestionSummary = {
+  id: string;
+  question: string;
+  intent: string | null;
+  sort_order: number;
+  provider_name: string | null;
+  provider_model: string | null;
+};
+
+export type ProviderRunSummary = {
+  id: string;
+  task_type: string;
+  provider_name: string;
+  provider_model: string | null;
+  status: string;
+  error_code: string | null;
+  error_message: string | null;
+  fallback_from_provider: string | null;
+  latency_ms: number | null;
+  created_at: string;
+};
+
+export type SemanticPreparationResponse = {
+  status: SemanticPreparationStatus;
+  message: string;
+  semantic_columns: SemanticColumnSummary[];
+  suggested_questions: DatasetQuestionSuggestionSummary[];
+  provider_runs: ProviderRunSummary[];
+  next_action: string | null;
+};
+
 export type DatasetDetailResponse = {
   dataset: DatasetSummary;
   file: DatasetFileSummary | null;
   schema_preview: SchemaPreview;
+  semantic_preparation: SemanticPreparationResponse;
 };
 
 export type DatasetUploadResponse = {
@@ -244,13 +308,19 @@ async function readJson(response: Response): Promise<unknown> {
 async function request<T>(
   path: string,
   options: {
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "PATCH";
     sessionId?: string | null;
     body?: BodyInit;
+    json?: unknown;
   } = {},
 ): Promise<T> {
   const headers = new Headers();
   headers.set("Accept", "application/json");
+  let requestBody = options.body;
+  if (options.json !== undefined) {
+    headers.set("Content-Type", "application/json");
+    requestBody = JSON.stringify(options.json);
+  }
   if (options.sessionId) {
     headers.set(DEMO_SESSION_HEADER, options.sessionId);
   }
@@ -260,7 +330,7 @@ async function request<T>(
     response = await fetch(`${apiBaseUrl()}${path}`, {
       method: options.method ?? "GET",
       headers,
-      body: options.body,
+      body: requestBody,
       cache: "no-store",
     });
   } catch {
@@ -273,11 +343,11 @@ async function request<T>(
     });
   }
 
-  const body = await readJson(response);
+  const responseBody = await readJson(response);
   if (!response.ok) {
-    if (isStructuredApiError(body)) {
+    if (isStructuredApiError(responseBody)) {
       throw new MeshFlowApiError({
-        ...body,
+        ...responseBody,
         statusCode: response.status,
       });
     }
@@ -291,7 +361,7 @@ async function request<T>(
     });
   }
 
-  return body as T;
+  return responseBody as T;
 }
 
 export function createDemoSession(): Promise<DemoSessionResponse> {
@@ -363,6 +433,48 @@ export function getDataset(
   sessionId: string,
 ): Promise<DatasetDetailResponse> {
   return request<DatasetDetailResponse>(`/datasets/${datasetId}`, { sessionId });
+}
+
+export function getSemanticPreparation(
+  datasetId: string,
+  sessionId: string,
+): Promise<SemanticPreparationResponse> {
+  return request<SemanticPreparationResponse>(
+    `/datasets/${datasetId}/semantic-preparation`,
+    { sessionId },
+  );
+}
+
+export function runSemanticPreparation(
+  datasetId: string,
+  sessionId: string,
+  force = false,
+): Promise<SemanticPreparationResponse> {
+  return request<SemanticPreparationResponse>(
+    `/datasets/${datasetId}/semantic-preparation`,
+    {
+      method: "POST",
+      sessionId,
+      json: { force },
+    },
+  );
+}
+
+export function updateSemanticColumnMappings(
+  datasetId: string,
+  sessionId: string,
+  columns: Array<{
+    column_profile_id: string;
+    approved_name: string;
+    approved_role: SemanticRole;
+    include_in_model: boolean;
+  }>,
+): Promise<SemanticPreparationResponse> {
+  return request<SemanticPreparationResponse>(`/datasets/${datasetId}/semantic-columns`, {
+    method: "PATCH",
+    sessionId,
+    json: { columns },
+  });
 }
 
 export function isSessionInvalidError(error: unknown): boolean {

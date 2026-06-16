@@ -31,6 +31,7 @@ function datasetLabel(dataset: Record<string, unknown>, index: number): string {
 export default function DashboardPage() {
   const { workspace } = useWorkspaceSession();
   const readyDatasets = workspace?.ready_datasets ?? [];
+  const schemaReviewDatasets = workspace?.datasets ?? [];
   const hasReadyDataset = readyDatasets.length > 0;
 
   return (
@@ -122,7 +123,9 @@ export default function DashboardPage() {
           <div className="mt-4">
             <p className="text-xs font-semibold text-ink">Suggested questions</p>
             <p className="mt-1.5 rounded-md bg-surface-muted px-3 py-2.5 text-xs text-ink-muted">
-              Suggestions appear once a dataset is attached and ready.
+              {schemaReviewDatasets.length > 0
+                ? "Prepared question suggestions can be reviewed in Data Flow after semantic preparation. Analysis stays disabled until Data Marts exist."
+                : "Suggestions appear after a dataset is loaded and semantic preparation succeeds."}
             </p>
           </div>
 
