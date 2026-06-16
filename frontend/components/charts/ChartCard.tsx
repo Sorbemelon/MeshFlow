@@ -1,7 +1,11 @@
 "use client";
 
 import { ChartRenderer } from "@/components/charts/ChartRenderer";
-import type { AnalysisRunChartSummary, AnalysisRunDetail } from "@/lib/meshflowApi";
+import type {
+  AnalysisInsightSummary,
+  AnalysisRunChartSummary,
+  AnalysisRunDetail,
+} from "@/lib/meshflowApi";
 
 function readableType(type: string): string {
   return type
@@ -14,11 +18,20 @@ export function ChartCard({
   chart,
   analysisRun,
   datasetName,
+  insights = [],
 }: {
   chart: AnalysisRunChartSummary;
   analysisRun: AnalysisRunDetail;
   datasetName: string;
+  insights?: AnalysisInsightSummary[];
 }) {
+  const chartInsight = insights.find(
+    (insight) =>
+      insight.status === "completed" &&
+      insight.insight_level === "chart" &&
+      insight.analysis_run_chart_id === chart.id,
+  );
+
   return (
     <article className="rounded-lg border border-violet-200 bg-surface p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -59,9 +72,19 @@ export function ChartCard({
         </span>
       </div>
 
-      <p className="mt-4 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-ink-muted">
-        Insight generation starts in a later phase.
-      </p>
+      {chartInsight ? (
+        <div className="mt-4 rounded-md border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-900">
+          <p className="font-semibold">Chart insight</p>
+          {chartInsight.summary ? <p className="mt-1">{chartInsight.summary}</p> : null}
+          {chartInsight.key_findings.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-indigo-800">
+              {chartInsight.key_findings.map((finding, index) => (
+                <li key={`${chartInsight.id}-${index}`}>{finding}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </article>
   );
 }

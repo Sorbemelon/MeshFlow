@@ -92,14 +92,22 @@ def dataset_summary(dataset: Dataset) -> DatasetSummary:
 
 
 def analysis_history_summary(run: AnalysisRun) -> dict[str, object]:
+    insight_status = "not_started"
+    if any(insight.status == "completed" for insight in run.insights):
+        insight_status = "completed"
+    elif any(insight.status == "failed" for insight in run.insights):
+        insight_status = "failed"
+
     return {
         "id": run.id,
         "dataset_id": run.dataset_id,
+        "dataset_name": run.dataset.name if run.dataset else None,
         "question": run.question,
         "status": run.status,
         "decision_type": run.decision_type,
         "source_model": run.source_model,
         "chart_count": len(run.charts),
+        "insight_status": insight_status,
         "row_count": run.row_count,
         "error_code": run.error_code,
         "failed_step": run.failed_step,
@@ -290,7 +298,11 @@ def get_workspace_response(
     analysis_runs = db.scalars(
         select(AnalysisRun)
         .where(AnalysisRun.demo_session_id == session.id)
-        .options(selectinload(AnalysisRun.charts))
+        .options(
+            selectinload(AnalysisRun.dataset),
+            selectinload(AnalysisRun.charts),
+            selectinload(AnalysisRun.insights),
+        )
         .order_by(AnalysisRun.created_at.desc())
         .limit(10)
     ).all()

@@ -173,6 +173,7 @@ export type ProviderRunSummary = {
 
 export type ChartType = "kpi" | "line" | "bar" | "horizontal_bar" | "table";
 export type ChartGenerationStatus = "not_started" | "completed" | "failed";
+export type InsightGenerationStatus = "not_started" | "completed" | "failed";
 
 export type ChartFieldSpec = {
   field: string;
@@ -210,6 +211,7 @@ export type AnalysisRunSummary = {
   id: string;
   demo_session_id: string;
   dataset_id: string;
+  dataset_name: string | null;
   question: string;
   normalized_question: string;
   status: AnalysisRunStatus;
@@ -224,6 +226,8 @@ export type AnalysisRunSummary = {
   error_code: string | null;
   failed_step: string | null;
   error_message: string | null;
+  chart_count: number;
+  insight_status: InsightGenerationStatus;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -253,11 +257,32 @@ export type AnalysisRunChartSummary = {
   created_at: string;
 };
 
+export type AnalysisInsightSummary = {
+  id: string;
+  analysis_run_id: string;
+  analysis_run_chart_id: string | null;
+  insight_level: "question" | "chart";
+  status: "completed" | "failed";
+  summary: string | null;
+  key_findings: string[];
+  tags: string[];
+  confidence: "low" | "medium" | "high" | string | null;
+  provider_name: string | null;
+  provider_model: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AnalysisRunResponse = {
   analysis_run: AnalysisRunDetail;
   charts: AnalysisRunChartSummary[];
+  insights: AnalysisInsightSummary[];
   chart_generation_status: ChartGenerationStatus;
   chart_generation_message: string | null;
+  insight_generation_status: InsightGenerationStatus;
+  insight_generation_message: string | null;
   reused: boolean;
 };
 

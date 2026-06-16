@@ -45,6 +45,10 @@ def generate_analysis_run_chart_id() -> str:
     return f"an_chart_{uuid4().hex}"
 
 
+def generate_analysis_insight_id() -> str:
+    return f"an_insight_{uuid4().hex}"
+
+
 def generate_transformation_run_id() -> str:
     return f"tf_run_{uuid4().hex}"
 
@@ -363,6 +367,11 @@ class AnalysisRun(Base):
         cascade="all, delete-orphan",
         order_by="AnalysisRunChart.sort_order",
     )
+    insights: Mapped[list[AnalysisInsight]] = relationship(
+        back_populates="analysis_run",
+        cascade="all, delete-orphan",
+        order_by="AnalysisInsight.created_at",
+    )
 
 
 class AnalysisRunChart(Base):
@@ -399,6 +408,54 @@ class AnalysisRunChart(Base):
     )
 
     analysis_run: Mapped[AnalysisRun] = relationship(back_populates="charts")
+    insights: Mapped[list[AnalysisInsight]] = relationship(
+        back_populates="chart",
+        order_by="AnalysisInsight.created_at",
+    )
+
+
+class AnalysisInsight(Base):
+    __tablename__ = "analysis_insights"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_analysis_insight_id,
+    )
+    analysis_run_id: Mapped[str] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    analysis_run_chart_id: Mapped[str | None] = mapped_column(
+        ForeignKey("analysis_run_charts.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    insight_level: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    summary: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    key_findings_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    tags_json: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
+    confidence: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    provider_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    provider_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    analysis_run: Mapped[AnalysisRun] = relationship(back_populates="insights")
+    chart: Mapped[AnalysisRunChart | None] = relationship(back_populates="insights")
 
 
 class AiProviderRun(Base):

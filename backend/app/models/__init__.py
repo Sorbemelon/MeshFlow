@@ -1,5 +1,6 @@
 from app.models.dataset import (
     AiProviderRun,
+    AnalysisInsight,
     AnalysisRunChart,
     AnalysisRun,
     ColumnProfile,
@@ -16,6 +17,7 @@ from app.models.demo_session import DemoSession
 
 __all__ = [
     "AiProviderRun",
+    "AnalysisInsight",
     "AnalysisRunChart",
     "AnalysisRun",
     "ColumnProfile",

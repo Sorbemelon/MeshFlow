@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AnalysisDetailDrawer } from "@/components/analysis/AnalysisDetailDrawer";
 import { ChartCard } from "@/components/charts/ChartCard";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import {
@@ -59,6 +60,7 @@ export default function DashboardPage() {
   >("idle");
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisRunResponse | null>(null);
+  const [detailAnalysisId, setDetailAnalysisId] = useState<string | null>(null);
 
   const activeDatasetId = useMemo(() => {
     if (!readyDatasets.length) {
@@ -78,6 +80,14 @@ export default function DashboardPage() {
   const hasSchemaReviewDatasets = useMemo(
     () => schemaReviewDatasets.length > 0,
     [schemaReviewDatasets],
+  );
+  const questionInsight = useMemo(
+    () =>
+      analysisResult?.insights.find(
+        (insight) =>
+          insight.status === "completed" && insight.insight_level === "question",
+      ) ?? null,
+    [analysisResult?.insights],
   );
 
   useEffect(() => {
@@ -320,10 +330,43 @@ export default function DashboardPage() {
                     {analysisResult.analysis_run.status}
                   </span>
                 </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700">
+                    Insights: {analysisResult.insight_generation_status}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDetailAnalysisId(analysisResult.analysis_run.id)}
+                    className="cursor-pointer rounded-md border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-300 hover:bg-violet-50"
+                  >
+                    View Evidence
+                  </button>
+                </div>
                 {analysisResult.chart_generation_status === "failed" ? (
                   <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                     {analysisResult.chart_generation_message ??
                       "The analysis completed, but MeshFlow could not create a valid ChartSpec for this result."}
+                  </p>
+                ) : null}
+                {questionInsight ? (
+                  <div className="mt-3 rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm text-indigo-900">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                      Question Insight
+                    </p>
+                    {questionInsight.summary ? <p className="mt-1">{questionInsight.summary}</p> : null}
+                    {questionInsight.key_findings.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs text-indigo-800">
+                        {questionInsight.key_findings.map((finding, index) => (
+                          <li key={`${questionInsight.id}-${index}`}>{finding}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                ) : null}
+                {analysisResult.insight_generation_status === "failed" ? (
+                  <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                    {analysisResult.insight_generation_message ??
+                      "Analysis and charts were generated, but insight generation failed."}
                   </p>
                 ) : null}
               </div>
@@ -335,6 +378,7 @@ export default function DashboardPage() {
                     chart={chart}
                     analysisRun={analysisResult.analysis_run}
                     datasetName={selectedDataset.name}
+                    insights={analysisResult.insights}
                   />
                 ))
               ) : analysisResult.chart_generation_status !== "failed" ? (
@@ -379,6 +423,12 @@ export default function DashboardPage() {
           )}
         </section>
       </div>
+      <AnalysisDetailDrawer
+        open={detailAnalysisId !== null}
+        sessionId={sessionId}
+        analysisRunId={detailAnalysisId}
+        onClose={() => setDetailAnalysisId(null)}
+      />
     </div>
   );
 }

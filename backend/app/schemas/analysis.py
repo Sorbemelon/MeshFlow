@@ -20,6 +20,9 @@ AnalysisDecisionType = Literal[
 ]
 ChartType = Literal["kpi", "line", "bar", "horizontal_bar", "table"]
 ChartGenerationStatus = Literal["not_started", "completed", "failed"]
+InsightGenerationStatus = Literal["not_started", "completed", "failed"]
+InsightLevel = Literal["question", "chart"]
+InsightStatus = Literal["completed", "failed"]
 
 
 class AnalysisRunCreateRequest(BaseModel):
@@ -37,6 +40,7 @@ class AnalysisRunSummary(BaseModel):
     id: str
     demo_session_id: str
     dataset_id: str
+    dataset_name: str | None = None
     question: str
     normalized_question: str
     status: AnalysisRunStatus
@@ -51,6 +55,8 @@ class AnalysisRunSummary(BaseModel):
     error_code: str | None = None
     failed_step: str | None = None
     error_message: str | None = None
+    chart_count: int = 0
+    insight_status: InsightGenerationStatus = "not_started"
     created_at: str
     updated_at: str
     completed_at: str | None = None
@@ -80,11 +86,32 @@ class AnalysisRunChartSummary(BaseModel):
     created_at: str
 
 
+class AnalysisInsightSummary(BaseModel):
+    id: str
+    analysis_run_id: str
+    analysis_run_chart_id: str | None = None
+    insight_level: InsightLevel
+    status: InsightStatus
+    summary: str | None = None
+    key_findings: list[str]
+    tags: list[str]
+    confidence: str | None = None
+    provider_name: str | None = None
+    provider_model: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    created_at: str
+    updated_at: str
+
+
 class AnalysisRunResponse(BaseModel):
     analysis_run: AnalysisRunDetail
     charts: list[AnalysisRunChartSummary] = Field(default_factory=list)
+    insights: list[AnalysisInsightSummary] = Field(default_factory=list)
     chart_generation_status: ChartGenerationStatus = "not_started"
     chart_generation_message: str | None = None
+    insight_generation_status: InsightGenerationStatus = "not_started"
+    insight_generation_message: str | None = None
     reused: bool = False
 
 

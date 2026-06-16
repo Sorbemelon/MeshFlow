@@ -13,6 +13,14 @@ from app.services.demo_session_service import DEMO_SESSION_HEADER
 from app.services.semantic_preparation_service import ProviderCandidate
 
 
+@pytest.fixture(autouse=True)
+def disable_insight_generation(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.insight_generation_service.provider_candidates",
+        lambda _config: [],
+    )
+
+
 def create_session(client: TestClient) -> str:
     response = client.post("/api/v1/demo-sessions")
     assert response.status_code == 200
@@ -117,6 +125,10 @@ def patch_analysis(
     monkeypatch.setattr(
         "app.services.analysis_run_service.snowflake_service.execute_analysis_query",
         lambda **_kwargs: snowflake_result,
+    )
+    monkeypatch.setattr(
+        "app.services.insight_generation_service.provider_candidates",
+        lambda _config: [],
     )
 
 

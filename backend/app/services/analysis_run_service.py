@@ -26,6 +26,11 @@ from app.services import snowflake_service
 from app.services.chartspec_service import ChartSpecError, chart_summary, store_analysis_charts
 from app.services.dataset_service import RAW_RETAIL_DEMO_SOURCE_TYPE
 from app.services.demo_session_service import configured_limits, get_required_session
+from app.services.insight_generation_service import (
+    ensure_analysis_insights,
+    insight_status_for_run,
+    insight_summary,
+)
 from app.services.semantic_preparation_service import (
     ProviderCallError,
     ProviderCandidate,
@@ -130,6 +135,7 @@ def _analysis_summary(run: AnalysisRun) -> AnalysisRunSummary:
         id=run.id,
         demo_session_id=run.demo_session_id,
         dataset_id=run.dataset_id,
+        dataset_name=run.dataset.name if run.dataset else None,
         question=run.question,
         normalized_question=run.normalized_question,
         status=run.status,
@@ -144,6 +150,8 @@ def _analysis_summary(run: AnalysisRun) -> AnalysisRunSummary:
         error_code=run.error_code,
         failed_step=run.failed_step,
         error_message=run.error_message,
+        chart_count=len(run.charts),
+        insight_status=insight_status_for_run(run),
         created_at=run.created_at.isoformat(),
         updated_at=run.updated_at.isoformat(),
         completed_at=run.completed_at.isoformat() if run.completed_at else None,
@@ -190,11 +198,23 @@ def _analysis_response(
     decision_type_override: str | None = None,
 ) -> AnalysisRunResponse:
     charts, chart_status, chart_message = _ensure_chart_summaries(db, run)
+    insight_status = "not_started"
+    insight_message = None
+    if chart_status == "completed" and charts:
+        insight_result = ensure_analysis_insights(db, run)
+        insight_status = insight_result.status
+        insight_message = insight_result.message
+    elif run.status == "completed" and chart_status == "failed":
+        insight_status = "failed"
+        insight_message = "Analysis completed, but chart snapshots are unavailable for insights."
     return AnalysisRunResponse(
         analysis_run=_analysis_detail(run, decision_type_override=decision_type_override),
         charts=charts,
+        insights=[insight_summary(insight) for insight in run.insights],
         chart_generation_status=chart_status,
         chart_generation_message=chart_message,
+        insight_generation_status=insight_status,
+        insight_generation_message=insight_message,
         reused=reused,
     )
 
@@ -208,7 +228,12 @@ def _load_analysis_run_for_session(
     run = db.scalar(
         select(AnalysisRun)
         .where(AnalysisRun.id == analysis_run_id, AnalysisRun.demo_session_id == session.id)
-        .options(selectinload(AnalysisRun.provider_runs), selectinload(AnalysisRun.charts))
+        .options(
+            selectinload(AnalysisRun.dataset),
+            selectinload(AnalysisRun.provider_runs),
+            selectinload(AnalysisRun.charts),
+            selectinload(AnalysisRun.insights),
+        )
     )
     if run is None:
         raise AppError(
@@ -332,6 +357,8 @@ def _find_reusable_run(
         )
         .options(selectinload(AnalysisRun.provider_runs))
         .options(selectinload(AnalysisRun.charts))
+        .options(selectinload(AnalysisRun.insights))
+        .options(selectinload(AnalysisRun.dataset))
         .order_by(AnalysisRun.completed_at.desc())
     )
 
@@ -859,16 +886,10 @@ def create_analysis_run(
     analysis_run.status = "completed"
     analysis_run.completed_at = model_utc_now()
     session.successful_analysis_runs_used += 1
-    charts, chart_status, chart_message = _ensure_chart_summaries(db, analysis_run)
+    response = _analysis_response(db, analysis_run, reused=False)
     db.commit()
     db.refresh(analysis_run)
-    return AnalysisRunResponse(
-        analysis_run=_analysis_detail(analysis_run),
-        charts=charts,
-        chart_generation_status=chart_status,
-        chart_generation_message=chart_message,
-        reused=False,
-    )
+    return response
 
 
 def list_analysis_runs(
@@ -880,7 +901,13 @@ def list_analysis_runs(
     statement = select(AnalysisRun).where(AnalysisRun.demo_session_id == session.id)
     if dataset_id:
         statement = statement.where(AnalysisRun.dataset_id == dataset_id)
-    runs = db.scalars(statement.order_by(AnalysisRun.created_at.desc())).all()
+    runs = db.scalars(
+        statement.options(
+            selectinload(AnalysisRun.dataset),
+            selectinload(AnalysisRun.charts),
+            selectinload(AnalysisRun.insights),
+        ).order_by(AnalysisRun.created_at.desc())
+    ).all()
     return AnalysisRunListResponse(analysis_runs=[_analysis_summary(run) for run in runs])
 
 
