@@ -55,6 +55,33 @@ def quote_qualified_name(value: str) -> str:
     return _quote_qualified_name(value)
 
 
+def _identifier_name(value: str) -> str:
+    if not value or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", value):
+        raise SnowflakeServiceError("Snowflake stage name contains an unsafe identifier.")
+    return value.upper()
+
+
+def _stage_lookup_parts(stage_name: str, config: Settings) -> tuple[str, str, str]:
+    parts = [_identifier_name(part.strip()) for part in stage_name.split(".") if part.strip()]
+    if len(parts) == 3:
+        return parts[0], parts[1], parts[2]
+    if len(parts) == 2:
+        if not config.snowflake_database:
+            raise SnowflakeServiceError(
+                "SNOWFLAKE_DATABASE is required when SNOWFLAKE_STAGE_NAME is schema-qualified."
+            )
+        return config.snowflake_database, parts[0], parts[1]
+    if len(parts) == 1:
+        if not config.snowflake_database or not config.snowflake_schema:
+            raise SnowflakeServiceError(
+                "SNOWFLAKE_DATABASE and SNOWFLAKE_SCHEMA are required for an unqualified stage name."
+            )
+        return config.snowflake_database, config.snowflake_schema, parts[0]
+    raise SnowflakeServiceError(
+        "SNOWFLAKE_STAGE_NAME must be STAGE, SCHEMA.STAGE, or DATABASE.SCHEMA.STAGE."
+    )
+
+
 def _connect(config: Settings = settings):
     try:
         import snowflake.connector
@@ -85,12 +112,36 @@ def check_connection_and_stage(config: Settings = settings) -> None:
     try:
         cursor = connection.cursor()
         try:
-            cursor.execute("SELECT 1")
-            cursor.execute(f"DESC STAGE {_quote_qualified_name(config.snowflake_stage_name)}")
+            try:
+                cursor.execute("SELECT 1")
+            except Exception as exc:
+                raise SnowflakeServiceError(
+                    "Snowflake connection query failed; verify warehouse, database, schema, and role access."
+                ) from exc
+
+            database, schema, stage = _stage_lookup_parts(config.snowflake_stage_name, config)
+            schema_ref = _quote_qualified_name(f"{database}.{schema}")
+            stage_pattern = stage.replace("'", "''")
+            try:
+                cursor.execute(f"SHOW STAGES LIKE '{stage_pattern}' IN SCHEMA {schema_ref}")
+                stages = cursor.fetchall()
+            except Exception as exc:
+                raise SnowflakeServiceError(
+                    "Snowflake stage lookup failed; verify SNOWFLAKE_DATABASE, SNOWFLAKE_SCHEMA, role access, and stage qualification."
+                ) from exc
+            if not stages:
+                raise SnowflakeServiceError(
+                    "Snowflake stage was not found or the configured role lacks access."
+                )
+
+            try:
+                cursor.execute(f"DESC STAGE {_quote_qualified_name(config.snowflake_stage_name)}")
+            except Exception as exc:
+                raise SnowflakeServiceError(
+                    "Snowflake stage exists, but DESC STAGE failed; verify external stage privileges and stage qualification."
+                ) from exc
         finally:
             cursor.close()
-    except Exception as exc:
-        raise SnowflakeServiceError("Snowflake readiness check failed.") from exc
     finally:
         connection.close()
 

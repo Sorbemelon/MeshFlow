@@ -77,13 +77,14 @@ def check_snowflake_readiness(config: Settings = settings) -> ReadinessCheck:
 
     try:
         snowflake_service.check_connection_and_stage(config)
-    except snowflake_service.SnowflakeServiceError:
+    except snowflake_service.SnowflakeServiceError as exc:
+        message = str(exc) or "Snowflake readiness check failed."
         return ReadinessCheck(
             status="failed",
-            message="Snowflake readiness check failed for the configured warehouse or stage.",
+            message=message,
             next_action=(
                 "Verify Snowflake credentials, database, schema, warehouse, role, "
-                "and external stage access."
+                "external stage access, and SNOWFLAKE_STAGE_NAME qualification."
             ),
         )
 
