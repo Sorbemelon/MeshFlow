@@ -2,6 +2,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.dashboard import DashboardCardSummary
 from app.schemas.dataset import ProviderRunSummary
 
 
@@ -29,6 +30,7 @@ class AnalysisRunCreateRequest(BaseModel):
     attached_dataset_id: str | None = None
     question: str = Field(min_length=1, max_length=500)
     force_new: bool = False
+    save_to_dashboard: bool = False
 
 
 class AnalysisMetricSummary(BaseModel):
@@ -112,6 +114,9 @@ class AnalysisRunResponse(BaseModel):
     chart_generation_message: str | None = None
     insight_generation_status: InsightGenerationStatus = "not_started"
     insight_generation_message: str | None = None
+    saved_dashboard_card: DashboardCardSummary | None = None
+    dashboard_card_created: bool = False
+    dashboard_card_message: str | None = None
     reused: bool = False
 
 

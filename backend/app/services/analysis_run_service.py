@@ -24,6 +24,11 @@ from app.schemas.analysis import (
 from app.schemas.dataset import ProviderRunSummary
 from app.services import snowflake_service
 from app.services.chartspec_service import ChartSpecError, chart_summary, store_analysis_charts
+from app.services.dashboard_service import (
+    dashboard_card_summary,
+    ensure_dashboard_card_for_analysis,
+    ensure_dashboard_card_quota_available,
+)
 from app.services.dataset_service import RAW_RETAIL_DEMO_SOURCE_TYPE
 from app.services.demo_session_service import configured_limits, get_required_session
 from app.services.insight_generation_service import (
@@ -196,6 +201,9 @@ def _analysis_response(
     *,
     reused: bool,
     decision_type_override: str | None = None,
+    save_to_dashboard: bool = False,
+    dashboard_session=None,
+    config: Settings = settings,
 ) -> AnalysisRunResponse:
     charts, chart_status, chart_message = _ensure_chart_summaries(db, run)
     insight_status = "not_started"
@@ -207,6 +215,22 @@ def _analysis_response(
     elif run.status == "completed" and chart_status == "failed":
         insight_status = "failed"
         insight_message = "Analysis completed, but chart snapshots are unavailable for insights."
+    dashboard_card = None
+    dashboard_card_created = False
+    dashboard_card_message = None
+    if save_to_dashboard and dashboard_session is not None and chart_status == "completed":
+        card, dashboard_card_created = ensure_dashboard_card_for_analysis(
+            db,
+            dashboard_session,
+            run,
+            config,
+        )
+        dashboard_card = dashboard_card_summary(card)
+        dashboard_card_message = (
+            "Dashboard card saved."
+            if dashboard_card_created
+            else "This analysis is already visible on the dashboard."
+        )
     return AnalysisRunResponse(
         analysis_run=_analysis_detail(run, decision_type_override=decision_type_override),
         charts=charts,
@@ -215,6 +239,9 @@ def _analysis_response(
         chart_generation_message=chart_message,
         insight_generation_status=insight_status,
         insight_generation_message=insight_message,
+        saved_dashboard_card=dashboard_card,
+        dashboard_card_created=dashboard_card_created,
+        dashboard_card_message=dashboard_card_message,
         reused=reused,
     )
 
@@ -795,11 +822,16 @@ def create_analysis_run(
                 reusable,
                 reused=True,
                 decision_type_override="reuse_existing",
+                save_to_dashboard=request.save_to_dashboard,
+                dashboard_session=session,
+                config=config,
             )
             db.commit()
             return response
 
     limits = configured_limits(config)
+    if request.save_to_dashboard:
+        ensure_dashboard_card_quota_available(session, config)
     if session.successful_analysis_runs_used >= limits.max_successful_analysis_runs_per_session:
         raise _quota_error()
 
@@ -886,7 +918,14 @@ def create_analysis_run(
     analysis_run.status = "completed"
     analysis_run.completed_at = model_utc_now()
     session.successful_analysis_runs_used += 1
-    response = _analysis_response(db, analysis_run, reused=False)
+    response = _analysis_response(
+        db,
+        analysis_run,
+        reused=False,
+        save_to_dashboard=request.save_to_dashboard,
+        dashboard_session=session,
+        config=config,
+    )
     db.commit()
     db.refresh(analysis_run)
     return response

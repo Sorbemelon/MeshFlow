@@ -3,15 +3,17 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 from app.schemas.demo_session import DemoSessionSummary
+from app.schemas.dashboard import DashboardCardSummary
 from app.schemas.dataset import DatasetSummary
 from app.schemas.limits import DemoLimits
 
 
 class DashboardSummary(BaseModel):
     dashboard_count: int
-    cards: list[dict[str, Any]]
+    cards: list[DashboardCardSummary]
     cards_used: int
     cards_limit: int
+    visible_card_count: int = 0
 
 
 class HistorySummary(BaseModel):

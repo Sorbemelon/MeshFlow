@@ -21,7 +21,7 @@ export function ChartCard({
   insights = [],
 }: {
   chart: AnalysisRunChartSummary;
-  analysisRun: AnalysisRunDetail;
+  analysisRun: Pick<AnalysisRunDetail, "status">;
   datasetName: string;
   insights?: AnalysisInsightSummary[];
 }) {

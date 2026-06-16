@@ -237,6 +237,9 @@ def reset_demo_session(
     session = get_required_session(db, session_id)
     session.status = "reset"
     session.reset_at = utc_now()
+    from app.services.dashboard_service import archive_active_dashboard_cards
+
+    archive_active_dashboard_cards(db, session.id)
 
     usage_reset = False
     if config.allow_demo_reset_usage:
@@ -306,6 +309,12 @@ def get_workspace_response(
         .order_by(AnalysisRun.created_at.desc())
         .limit(10)
     ).all()
+    from app.services.dashboard_service import (
+        active_dashboard_cards_for_session,
+        dashboard_card_summary,
+    )
+
+    dashboard_cards = active_dashboard_cards_for_session(db, session.id)
 
     return WorkspaceResponse(
         session=summary_from_session(session, config),
@@ -314,9 +323,10 @@ def get_workspace_response(
         active_dataset=None,
         dashboard=DashboardSummary(
             dashboard_count=limits.dashboards_per_session,
-            cards=[],
+            cards=[dashboard_card_summary(card) for card in dashboard_cards],
             cards_used=usage.dashboard_cards_used,
             cards_limit=limits.max_dashboard_cards_per_session,
+            visible_card_count=len(dashboard_cards),
         ),
         history=HistorySummary(
             analysis_runs=[analysis_history_summary(run) for run in analysis_runs],

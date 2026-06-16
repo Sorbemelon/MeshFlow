@@ -6,9 +6,10 @@ import { ChartCard } from "@/components/charts/ChartCard";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import {
   createAnalysisRun,
+  deleteDashboardCard,
   getDataset,
   MeshFlowApiError,
-  type AnalysisRunResponse,
+  type DashboardCardSummary,
   type DatasetQuestionSuggestionSummary,
 } from "@/lib/meshflowApi";
 
@@ -38,6 +39,111 @@ function datasetLabel(dataset: Record<string, unknown>, index: number): string {
   return `Ready dataset ${index + 1}`;
 }
 
+function formatDate(value: string | null): string {
+  if (!value) {
+    return "Not completed";
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+function PersistedDashboardCard({
+  card,
+  isRemoving,
+  onRemove,
+  onViewEvidence,
+}: {
+  card: DashboardCardSummary;
+  isRemoving: boolean;
+  onRemove: () => void;
+  onViewEvidence: () => void;
+}) {
+  const snapshot = card.card_snapshot;
+  const questionInsight =
+    snapshot.insights.find(
+      (insight) =>
+        insight.status === "completed" && insight.insight_level === "question",
+    ) ?? null;
+  const datasetName =
+    card.dataset_name_snapshot ?? snapshot.dataset.name ?? "Saved dataset snapshot";
+
+  return (
+    <article className="rounded-lg border border-violet-200 bg-violet-50/35 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+            Saved Result Group
+          </p>
+          <h2 className="mt-1 text-base font-semibold text-ink">{card.title}</h2>
+          <p className="mt-1 text-xs text-ink-muted">
+            Saved {formatDate(card.created_at)}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {card.source_model_snapshot ? (
+            <span className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700">
+              {card.source_model_snapshot}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            onClick={onViewEvidence}
+            className="cursor-pointer rounded-md border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-300 hover:bg-violet-50"
+          >
+            View Evidence
+          </button>
+          <button
+            type="button"
+            disabled={isRemoving}
+            onClick={onRemove}
+            title="Remove this visible card. Public quota usage is not restored."
+            className="cursor-pointer rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isRemoving ? "Removing..." : "Remove"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
+          Dataset: {datasetName}
+        </span>
+        <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
+          Status: {snapshot.analysis_run.status}
+        </span>
+      </div>
+
+      {questionInsight ? (
+        <div className="mt-3 rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm text-indigo-900">
+          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+            Question Insight
+          </p>
+          {questionInsight.summary ? <p className="mt-1">{questionInsight.summary}</p> : null}
+          {questionInsight.key_findings.length > 0 ? (
+            <ul className="mt-2 space-y-1 text-xs text-indigo-800">
+              {questionInsight.key_findings.map((finding, index) => (
+                <li key={`${questionInsight.id}-${index}`}>{finding}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="mt-4 grid gap-4">
+        {snapshot.charts.map((chart) => (
+          <ChartCard
+            key={chart.id}
+            chart={chart}
+            analysisRun={{ status: snapshot.analysis_run.status }}
+            datasetName={datasetName}
+            insights={snapshot.insights}
+          />
+        ))}
+      </div>
+    </article>
+  );
+}
+
 export default function DashboardPage() {
   const { sessionId, workspace, refresh } = useWorkspaceSession();
   const readyDatasets = useMemo(
@@ -46,6 +152,7 @@ export default function DashboardPage() {
   );
   const schemaReviewDatasets = useMemo(() => workspace?.datasets ?? [], [workspace?.datasets]);
   const hasReadyDataset = readyDatasets.length > 0;
+  const dashboardCards = workspace?.dashboard.cards ?? [];
   const [selectedDatasetId, setSelectedDatasetId] = useState("");
   const [questionState, setQuestionState] = useState<"idle" | "loading" | "ready" | "error">(
     "idle",
@@ -59,8 +166,8 @@ export default function DashboardPage() {
     "idle" | "planning" | "generated" | "reused" | "failed"
   >("idle");
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisRunResponse | null>(null);
   const [detailAnalysisId, setDetailAnalysisId] = useState<string | null>(null);
+  const [removingCardId, setRemovingCardId] = useState<string | null>(null);
 
   const activeDatasetId = useMemo(() => {
     if (!readyDatasets.length) {
@@ -80,14 +187,6 @@ export default function DashboardPage() {
   const hasSchemaReviewDatasets = useMemo(
     () => schemaReviewDatasets.length > 0,
     [schemaReviewDatasets],
-  );
-  const questionInsight = useMemo(
-    () =>
-      analysisResult?.insights.find(
-        (insight) =>
-          insight.status === "completed" && insight.insight_level === "question",
-      ) ?? null,
-    [analysisResult?.insights],
   );
 
   useEffect(() => {
@@ -141,29 +240,52 @@ export default function DashboardPage() {
 
     setAnalysisState("planning");
     setAnalysisMessage("Planning, validating, and running the Snowflake analysis...");
-    setAnalysisResult(null);
 
     try {
       const response = await createAnalysisRun(sessionId, {
         attached_dataset_id: activeDatasetId,
         question: questionText.trim(),
+        save_to_dashboard: true,
       });
-      setAnalysisResult(response);
       setAnalysisState(response.reused ? "reused" : "generated");
       setAnalysisMessage(
-        response.reused
-          ? "Reused a matching completed analysis run."
-          : "Generated from a completed Snowflake analysis run.",
+        response.dashboard_card_message ??
+          (response.reused
+            ? "Reused a matching completed analysis run."
+            : "Generated and saved to the dashboard."),
       );
       await refresh();
     } catch (caught) {
       setAnalysisState("failed");
-      setAnalysisResult(null);
       setAnalysisMessage(
         caught instanceof MeshFlowApiError
           ? caught.details.message
           : "MeshFlow could not generate the analysis result.",
       );
+    }
+  }
+
+  async function handleRemoveCard(cardId: string) {
+    if (!sessionId) {
+      return;
+    }
+    setRemovingCardId(cardId);
+    setAnalysisMessage(null);
+    try {
+      const response = await deleteDashboardCard(sessionId, cardId);
+      setAnalysisMessage(
+        response.message ??
+          "Dashboard card removed from the visible canvas. Public quota was not restored.",
+      );
+      await refresh();
+    } catch (caught) {
+      setAnalysisMessage(
+        caught instanceof MeshFlowApiError
+          ? caught.details.message
+          : "MeshFlow could not remove this dashboard card.",
+      );
+    } finally {
+      setRemovingCardId(null);
     }
   }
 
@@ -314,84 +436,39 @@ export default function DashboardPage() {
         </section>
 
         <section className="min-w-0">
-          {analysisResult ? (
+          {dashboardCards.length > 0 ? (
             <div className="grid gap-4">
               <div className="rounded-lg border border-violet-200 bg-violet-50/40 px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
-                      {analysisResult.reused ? "Reused Result Group" : "Generated Result Group"}
+                      Persisted Dashboard
                     </p>
                     <h2 className="mt-1 text-base font-semibold text-ink">
-                      {analysisResult.analysis_run.question}
+                      {dashboardCards.length} visible card{dashboardCards.length === 1 ? "" : "s"}
                     </h2>
                   </div>
                   <span className="rounded-full border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-700">
-                    {analysisResult.analysis_run.status}
+                    Used {workspace?.dashboard.cards_used ?? 0} / {workspace?.dashboard.cards_limit ?? 8}
                   </span>
                 </div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-xs font-semibold text-indigo-700">
-                    Insights: {analysisResult.insight_generation_status}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setDetailAnalysisId(analysisResult.analysis_run.id)}
-                    className="cursor-pointer rounded-md border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-300 hover:bg-violet-50"
-                  >
-                    View Evidence
-                  </button>
-                </div>
-                {analysisResult.chart_generation_status === "failed" ? (
-                  <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    {analysisResult.chart_generation_message ??
-                      "The analysis completed, but MeshFlow could not create a valid ChartSpec for this result."}
-                  </p>
-                ) : null}
-                {questionInsight ? (
-                  <div className="mt-3 rounded-md border border-indigo-200 bg-white px-3 py-2 text-sm text-indigo-900">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
-                      Question Insight
-                    </p>
-                    {questionInsight.summary ? <p className="mt-1">{questionInsight.summary}</p> : null}
-                    {questionInsight.key_findings.length > 0 ? (
-                      <ul className="mt-2 space-y-1 text-xs text-indigo-800">
-                        {questionInsight.key_findings.map((finding, index) => (
-                          <li key={`${questionInsight.id}-${index}`}>{finding}</li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                ) : null}
-                {analysisResult.insight_generation_status === "failed" ? (
-                  <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    {analysisResult.insight_generation_message ??
-                      "Analysis and charts were generated, but insight generation failed."}
-                  </p>
-                ) : null}
+                <p className="mt-2 text-sm text-violet-900">
+                  Removing a visible card does not restore public demo quota.
+                </p>
               </div>
-
-              {analysisResult.charts.length > 0 && selectedDataset ? (
-                analysisResult.charts.map((chart) => (
-                  <ChartCard
-                    key={chart.id}
-                    chart={chart}
-                    analysisRun={analysisResult.analysis_run}
-                    datasetName={selectedDataset.name}
-                    insights={analysisResult.insights}
-                  />
-                ))
-              ) : analysisResult.chart_generation_status !== "failed" ? (
-                <div className="rounded-lg border border-dashed border-violet-200 bg-surface px-6 py-12 text-center">
-                  <h3 className="text-base font-semibold text-ink">
-                    No chart snapshot returned
-                  </h3>
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-ink-muted">
-                    The backend returned a completed analysis without chart snapshots.
-                    No synthetic chart is shown.
-                  </p>
-                </div>
-              ) : null}
+              {dashboardCards.map((card) => (
+                <PersistedDashboardCard
+                  key={card.id}
+                  card={card}
+                  isRemoving={removingCardId === card.id}
+                  onRemove={() => void handleRemoveCard(card.id)}
+                  onViewEvidence={() => {
+                    if (card.analysis_run_id) {
+                      setDetailAnalysisId(card.analysis_run_id);
+                    }
+                  }}
+                />
+              ))}
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-violet-200 bg-violet-50/30 px-6 py-16 text-center">
@@ -408,7 +485,7 @@ export default function DashboardPage() {
               </h3>
               <p className="prose-measure mt-2 text-sm text-ink-muted">
                 {hasReadyDataset
-                  ? "Generated chart snapshots from completed Snowflake analysis runs appear here. Dashboard card persistence starts later."
+                  ? "Saved dashboard cards from completed Snowflake analysis runs appear here. Nothing is shown until a real result is persisted."
                   : "Once a dataset is uploaded and transformed to Data Marts, generated chart cards appear here with a dataset badge and evidence."}
               </p>
               {!hasReadyDataset ? (

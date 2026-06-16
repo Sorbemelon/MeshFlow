@@ -46,11 +46,56 @@ export type DemoSessionResetResponse = DemoSessionResponse & {
   message: string;
 };
 
+export type DashboardCardSnapshot = {
+  snapshot_version: number;
+  dataset: {
+    id: string;
+    name: string | null;
+    source_type: string | null;
+  };
+  analysis_run: {
+    id: string;
+    question: string;
+    status: AnalysisRunStatus;
+    decision_type: AnalysisDecisionType;
+    source_model: string | null;
+    grain: string | null;
+    metrics: Record<string, unknown>[];
+    dimensions: string[];
+    row_count: number | null;
+    completed_at: string | null;
+  };
+  charts: AnalysisRunChartSummary[];
+  insights: AnalysisInsightSummary[];
+  provider_runs: Record<string, unknown>[];
+  generated_at: string;
+};
+
+export type DashboardCardSummary = {
+  id: string;
+  demo_session_id: string;
+  dataset_id: string | null;
+  analysis_run_id: string | null;
+  analysis_run_chart_id: string | null;
+  card_type: "result_group" | "chart";
+  title: string;
+  subtitle: string | null;
+  dataset_name_snapshot: string | null;
+  source_model_snapshot: string | null;
+  card_snapshot: DashboardCardSnapshot;
+  sort_order: number;
+  status: "active" | "archived";
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type DashboardSummary = {
   dashboard_count: number;
-  cards: Record<string, unknown>[];
+  cards: DashboardCardSummary[];
   cards_used: number;
   cards_limit: number;
+  visible_card_count: number;
 };
 
 export type HistorySummary = {
@@ -283,11 +328,30 @@ export type AnalysisRunResponse = {
   chart_generation_message: string | null;
   insight_generation_status: InsightGenerationStatus;
   insight_generation_message: string | null;
+  saved_dashboard_card: DashboardCardSummary | null;
+  dashboard_card_created: boolean;
+  dashboard_card_message: string | null;
   reused: boolean;
 };
 
 export type AnalysisRunListResponse = {
   analysis_runs: AnalysisRunSummary[];
+};
+
+export type DashboardResponse = {
+  dashboard_count: number;
+  cards: DashboardCardSummary[];
+  cards_used: number;
+  cards_limit: number;
+  visible_card_count: number;
+};
+
+export type DashboardCardMutationResponse = {
+  card: DashboardCardSummary;
+  cards_used: number;
+  cards_limit: number;
+  created: boolean;
+  message: string | null;
 };
 
 export type SemanticPreparationResponse = {
@@ -502,7 +566,7 @@ async function readJson(response: Response): Promise<unknown> {
 async function request<T>(
   path: string,
   options: {
-    method?: "GET" | "POST" | "PATCH";
+    method?: "GET" | "POST" | "PATCH" | "DELETE";
     sessionId?: string | null;
     body?: BodyInit;
     json?: unknown;
@@ -698,6 +762,7 @@ export function createAnalysisRun(
     attached_dataset_id: string;
     question: string;
     force_new?: boolean;
+    save_to_dashboard?: boolean;
   },
 ): Promise<AnalysisRunResponse> {
   return request<AnalysisRunResponse>("/analysis-runs", {
@@ -707,7 +772,33 @@ export function createAnalysisRun(
       attached_dataset_id: input.attached_dataset_id,
       question: input.question,
       force_new: input.force_new ?? false,
+      save_to_dashboard: input.save_to_dashboard ?? false,
     },
+  });
+}
+
+export function getDashboard(sessionId: string): Promise<DashboardResponse> {
+  return request<DashboardResponse>("/dashboard", { sessionId });
+}
+
+export function createDashboardCardFromAnalysis(
+  sessionId: string,
+  analysisRunId: string,
+): Promise<DashboardCardMutationResponse> {
+  return request<DashboardCardMutationResponse>("/dashboard/cards", {
+    method: "POST",
+    sessionId,
+    json: { analysis_run_id: analysisRunId },
+  });
+}
+
+export function deleteDashboardCard(
+  sessionId: string,
+  cardId: string,
+): Promise<DashboardCardMutationResponse> {
+  return request<DashboardCardMutationResponse>(`/dashboard/cards/${cardId}`, {
+    method: "DELETE",
+    sessionId,
   });
 }
 

@@ -49,6 +49,10 @@ def generate_analysis_insight_id() -> str:
     return f"an_insight_{uuid4().hex}"
 
 
+def generate_dashboard_card_id() -> str:
+    return f"dash_card_{uuid4().hex}"
+
+
 def generate_transformation_run_id() -> str:
     return f"tf_run_{uuid4().hex}"
 
@@ -372,6 +376,10 @@ class AnalysisRun(Base):
         cascade="all, delete-orphan",
         order_by="AnalysisInsight.created_at",
     )
+    dashboard_cards: Mapped[list[DashboardCard]] = relationship(
+        back_populates="analysis_run",
+        order_by="DashboardCard.created_at",
+    )
 
 
 class AnalysisRunChart(Base):
@@ -456,6 +464,60 @@ class AnalysisInsight(Base):
 
     analysis_run: Mapped[AnalysisRun] = relationship(back_populates="insights")
     chart: Mapped[AnalysisRunChart | None] = relationship(back_populates="insights")
+
+
+class DashboardCard(Base):
+    __tablename__ = "dashboard_cards"
+
+    id: Mapped[str] = mapped_column(
+        String(64),
+        primary_key=True,
+        default=generate_dashboard_card_id,
+    )
+    demo_session_id: Mapped[str] = mapped_column(
+        ForeignKey("demo_sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    dataset_id: Mapped[str | None] = mapped_column(
+        ForeignKey("datasets.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    analysis_run_id: Mapped[str | None] = mapped_column(
+        ForeignKey("analysis_runs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    analysis_run_chart_id: Mapped[str | None] = mapped_column(
+        ForeignKey("analysis_run_charts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    card_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    subtitle: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    dataset_name_snapshot: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_model_snapshot: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    card_snapshot_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="active", index=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+    )
+
+    dataset: Mapped[Dataset | None] = relationship()
+    analysis_run: Mapped[AnalysisRun | None] = relationship(back_populates="dashboard_cards")
+    chart: Mapped[AnalysisRunChart | None] = relationship()
 
 
 class AiProviderRun(Base):
