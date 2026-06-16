@@ -88,6 +88,7 @@ def dataset_summary(dataset: Dataset) -> DatasetSummary:
         column_count=dataset.column_count,
         raw_table_name=dataset.raw_table_name,
         created_at=dataset.created_at.isoformat(),
+        deleted_at=dataset.deleted_at.isoformat() if dataset.deleted_at else None,
     )
 
 
@@ -102,6 +103,11 @@ def analysis_history_summary(run: AnalysisRun) -> dict[str, object]:
         "id": run.id,
         "dataset_id": run.dataset_id,
         "dataset_name": run.dataset.name if run.dataset else None,
+        "dataset_deleted": bool(
+            run.dataset is None
+            or run.dataset.deleted_at is not None
+            or run.dataset.status == "deleted"
+        ),
         "question": run.question,
         "status": run.status,
         "decision_type": run.decision_type,
@@ -116,7 +122,11 @@ def analysis_history_summary(run: AnalysisRun) -> dict[str, object]:
     }
 
 
-def mark_expired_sessions(db: Session, now: datetime | None = None) -> int:
+def mark_expired_sessions(
+    db: Session,
+    now: datetime | None = None,
+    config: Settings = settings,
+) -> int:
     checked_at = now or utc_now()
     expired_count = 0
     sessions = db.scalars(
@@ -125,6 +135,9 @@ def mark_expired_sessions(db: Session, now: datetime | None = None) -> int:
 
     for session in sessions:
         if as_utc(session.expires_at) <= checked_at:
+            from app.services.cleanup_service import clear_session_workspace
+
+            clear_session_workspace(db, session, config)
             session.status = "expired"
             expired_count += 1
 
@@ -203,6 +216,9 @@ def get_required_session(
         raise _session_not_found_error()
 
     if session.status == "expired" or as_utc(session.expires_at) <= checked_at:
+        from app.services.cleanup_service import clear_session_workspace
+
+        clear_session_workspace(db, session, settings)
         session.status = "expired"
         db.commit()
         raise _session_expired_error()
@@ -237,9 +253,10 @@ def reset_demo_session(
     session = get_required_session(db, session_id)
     session.status = "reset"
     session.reset_at = utc_now()
-    from app.services.dashboard_service import archive_active_dashboard_cards
 
-    archive_active_dashboard_cards(db, session.id)
+    from app.services.cleanup_service import clear_session_workspace
+
+    cleanup = clear_session_workspace(db, session, config)
 
     usage_reset = False
     if config.allow_demo_reset_usage:
@@ -266,6 +283,9 @@ def reset_demo_session(
         limits=configured_limits(config),
         usage=usage_from_session(session),
         usage_reset=usage_reset,
+        workspace_cleared=True,
+        quota_restored=usage_reset,
+        cleanup=cleanup,
         message=message,
     )
 
@@ -300,7 +320,14 @@ def get_workspace_response(
     ]
     analysis_runs = db.scalars(
         select(AnalysisRun)
-        .where(AnalysisRun.demo_session_id == session.id)
+        .where(
+            AnalysisRun.demo_session_id == session.id,
+            *(
+                [AnalysisRun.created_at > session.reset_at]
+                if session.reset_at is not None
+                else []
+            ),
+        )
         .options(
             selectinload(AnalysisRun.dataset),
             selectinload(AnalysisRun.charts),

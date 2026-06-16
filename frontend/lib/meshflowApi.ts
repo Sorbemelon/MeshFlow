@@ -41,8 +41,20 @@ export type DemoSessionResponse = {
   usage: DemoUsage;
 };
 
+export type CleanupStatus = "completed" | "skipped" | "failed" | "not_configured";
+
+export type CleanupSummary = {
+  s3: CleanupStatus;
+  snowflake: CleanupStatus;
+  dbt_runtime: CleanupStatus;
+  warnings: string[];
+};
+
 export type DemoSessionResetResponse = DemoSessionResponse & {
   usage_reset: boolean;
+  workspace_cleared: boolean;
+  quota_restored: boolean;
+  cleanup: CleanupSummary;
   message: string;
 };
 
@@ -52,6 +64,9 @@ export type DashboardCardSnapshot = {
     id: string;
     name: string | null;
     source_type: string | null;
+    status?: string | null;
+    deleted?: boolean;
+    deleted_at?: string | null;
   };
   analysis_run: {
     id: string;
@@ -83,6 +98,7 @@ export type DashboardCardSummary = {
   dataset_name_snapshot: string | null;
   source_model_snapshot: string | null;
   card_snapshot: DashboardCardSnapshot;
+  source_dataset_deleted: boolean;
   sort_order: number;
   status: "active" | "archived";
   archived_at: string | null;
@@ -130,6 +146,7 @@ export type DatasetSummary = {
   column_count: number;
   raw_table_name: string;
   created_at: string;
+  deleted_at: string | null;
 };
 
 export type ColumnProfileSummary = {
@@ -273,6 +290,7 @@ export type AnalysisRunSummary = {
   error_message: string | null;
   chart_count: number;
   insight_status: InsightGenerationStatus;
+  dataset_deleted: boolean;
   created_at: string;
   updated_at: string;
   completed_at: string | null;
@@ -449,6 +467,14 @@ export type DatasetUploadResponse = {
   file: DatasetFileSummary;
   schema_preview: SchemaPreview;
   next_route: string;
+};
+
+export type DatasetDeleteResponse = {
+  status: "deleted" | "already_deleted";
+  dataset_id: string;
+  message: string;
+  quota_restored: false;
+  cleanup: CleanupSummary;
 };
 
 export type WorkspaceResponse = {
@@ -691,6 +717,16 @@ export function getDataset(
   sessionId: string,
 ): Promise<DatasetDetailResponse> {
   return request<DatasetDetailResponse>(`/datasets/${datasetId}`, { sessionId });
+}
+
+export function deleteDataset(
+  datasetId: string,
+  sessionId: string,
+): Promise<DatasetDeleteResponse> {
+  return request<DatasetDeleteResponse>(`/datasets/${datasetId}`, {
+    method: "DELETE",
+    sessionId,
+  });
 }
 
 export function getDatasetDataFlow(

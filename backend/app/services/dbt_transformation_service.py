@@ -100,6 +100,12 @@ class GeneratedDbtProject:
     artifacts: list[tuple[str, str, str, str, Path | None]]
 
 
+@dataclass(frozen=True)
+class CleanupOperationResult:
+    status: str
+    warning: str | None = None
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -173,7 +179,6 @@ def _load_dataset(
         .where(
             Dataset.id == dataset_id,
             Dataset.demo_session_id == session.id,
-            Dataset.deleted_at.is_(None),
         )
         .options(
             selectinload(Dataset.files),
@@ -194,17 +199,31 @@ def _load_dataset(
             next_action="Select an available dataset from the workspace.",
             status_code=status.HTTP_404_NOT_FOUND,
         )
+    if dataset.deleted_at is not None or dataset.status == "deleted":
+        raise AppError(
+            error_code="DATASET_DELETED",
+            failed_step="dataset_validation",
+            message=(
+                "This dataset was deleted from the active workspace. Existing dashboard "
+                "cards and history remain available, but transformation cannot run from it."
+            ),
+            next_action="Upload or prepare another dataset.",
+            status_code=status.HTTP_410_GONE,
+        )
     return dataset
 
 
 def _ensure_transformable_dataset(dataset: Dataset) -> None:
     if dataset.deleted_at is not None or dataset.status == "deleted":
         raise AppError(
-            error_code="DATASET_NOT_FOUND",
-            failed_step="dataset",
-            message="The requested dataset was not found for this demo session.",
-            next_action="Select an available dataset from the workspace.",
-            status_code=status.HTTP_404_NOT_FOUND,
+            error_code="DATASET_DELETED",
+            failed_step="dataset_validation",
+            message=(
+                "This dataset was deleted from the active workspace. Existing dashboard "
+                "cards and history remain available, but transformation cannot run from it."
+            ),
+            next_action="Upload or prepare another dataset.",
+            status_code=status.HTTP_410_GONE,
         )
     if not dataset.raw_table_name:
         raise AppError(
@@ -970,3 +989,29 @@ def get_dataset_data_flow(
         artifacts=[_artifact_summary(artifact) for artifact in latest_run_artifacts],
         models=_models_from_run(latest_run),
     )
+
+
+def cleanup_dataset_runtime_artifacts(
+    *,
+    dataset_id: str,
+    config: Settings = settings,
+) -> CleanupOperationResult:
+    base_dir = Path(config.dbt_projects_dir).resolve()
+    target_dir = (base_dir / dataset_id).resolve()
+    if not target_dir.exists():
+        return CleanupOperationResult(status="skipped")
+    if target_dir == base_dir or not target_dir.is_relative_to(base_dir):
+        return CleanupOperationResult(
+            status="failed",
+            warning="dbt runtime cleanup refused to remove a path outside DBT_PROJECTS_DIR.",
+        )
+
+    try:
+        shutil.rmtree(target_dir)
+    except OSError as exc:
+        return CleanupOperationResult(
+            status="failed",
+            warning=f"dbt runtime cleanup failed for dataset {dataset_id}: {exc.__class__.__name__}.",
+        )
+
+    return CleanupOperationResult(status="completed")

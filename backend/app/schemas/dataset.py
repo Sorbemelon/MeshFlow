@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 DatasetSourceType = Literal["uploaded_csv", "demo_raw_retail"]
@@ -33,6 +33,14 @@ SemanticRole = Literal[
 SemanticPreparationStatus = Literal["not_started", "running", "completed", "failed"]
 TransformationStatus = Literal["not_started", "pending", "running", "completed", "failed"]
 DataFlowNodeStatus = Literal["not_started", "waiting", "running", "completed", "failed"]
+CleanupStatus = Literal["completed", "skipped", "failed", "not_configured"]
+
+
+class CleanupSummary(BaseModel):
+    s3: CleanupStatus = "skipped"
+    snowflake: CleanupStatus = "skipped"
+    dbt_runtime: CleanupStatus = "skipped"
+    warnings: list[str] = Field(default_factory=list)
 
 
 class ColumnProfileSummary(BaseModel):
@@ -109,6 +117,7 @@ class DatasetSummary(BaseModel):
     column_count: int
     raw_table_name: str
     created_at: str
+    deleted_at: str | None = None
 
 
 class DatasetFileSummary(BaseModel):
@@ -189,6 +198,14 @@ class DatasetTransformResponse(BaseModel):
 
 class DatasetListResponse(BaseModel):
     datasets: list[DatasetSummary]
+
+
+class DatasetDeleteResponse(BaseModel):
+    status: Literal["deleted", "already_deleted"]
+    dataset_id: str
+    message: str
+    quota_restored: bool = False
+    cleanup: CleanupSummary
 
 
 class DatasetUploadResponse(BaseModel):

@@ -26,6 +26,12 @@ class SnowflakeQueryResult:
     row_count: int
 
 
+@dataclass(frozen=True)
+class CleanupOperationResult:
+    status: str
+    warning: str | None = None
+
+
 def raw_table_name_for_dataset(dataset_id: str) -> str:
     suffix = re.sub(r"[^A-Za-z0-9_]+", "_", dataset_id).upper()
     return f"RAW_UPLOAD_{suffix[:48]}"
@@ -188,3 +194,54 @@ def execute_analysis_query(
         preview_rows=preview_rows,
         row_count=len(preview_rows),
     )
+
+
+def drop_raw_table_for_cleanup(
+    *,
+    raw_table_name: str | None,
+    config: Settings = settings,
+) -> CleanupOperationResult:
+    if not raw_table_name:
+        return CleanupOperationResult(status="skipped")
+    if not raw_table_name.startswith("RAW_UPLOAD_"):
+        return CleanupOperationResult(
+            status="skipped",
+            warning=(
+                "Snowflake cleanup skipped because the raw table name is not a "
+                "MeshFlow-generated RAW_UPLOAD table."
+            ),
+        )
+    if not (
+        config.snowflake_account
+        and config.snowflake_user
+        and config.snowflake_password
+        and config.snowflake_warehouse
+        and config.snowflake_database
+        and config.snowflake_schema
+    ):
+        return CleanupOperationResult(
+            status="not_configured",
+            warning="Snowflake cleanup skipped because Snowflake is not fully configured.",
+        )
+
+    connection = None
+    try:
+        connection = _connect(config)
+        cursor = connection.cursor()
+        try:
+            cursor.execute(f"DROP TABLE IF EXISTS {_quote_identifier(raw_table_name)}")
+        finally:
+            cursor.close()
+    except Exception as exc:
+        return CleanupOperationResult(
+            status="failed",
+            warning=(
+                f"Snowflake cleanup failed for raw table {raw_table_name}: "
+                f"{exc.__class__.__name__}."
+            ),
+        )
+    finally:
+        if connection is not None:
+            connection.close()
+
+    return CleanupOperationResult(status="completed")

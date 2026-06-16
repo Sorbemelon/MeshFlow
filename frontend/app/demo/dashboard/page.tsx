@@ -66,6 +66,7 @@ function PersistedDashboardCard({
     ) ?? null;
   const datasetName =
     card.dataset_name_snapshot ?? snapshot.dataset.name ?? "Saved dataset snapshot";
+  const datasetDeleted = card.source_dataset_deleted || snapshot.dataset.deleted === true;
 
   return (
     <article className="rounded-lg border border-violet-200 bg-violet-50/35 p-4">
@@ -108,6 +109,11 @@ function PersistedDashboardCard({
         <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
           Dataset: {datasetName}
         </span>
+        {datasetDeleted ? (
+          <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">
+            Dataset deleted
+          </span>
+        ) : null}
         <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-medium text-slate-700">
           Status: {snapshot.analysis_run.status}
         </span>

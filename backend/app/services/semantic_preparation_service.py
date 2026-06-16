@@ -196,7 +196,6 @@ def _load_dataset_for_session(
         .where(
             Dataset.id == dataset_id,
             Dataset.demo_session_id == session.id,
-            Dataset.deleted_at.is_(None),
         )
         .options(
             selectinload(Dataset.column_profiles),
@@ -212,6 +211,17 @@ def _load_dataset_for_session(
             message="The requested dataset was not found for this demo session.",
             next_action="Select an available dataset from the workspace.",
             status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if dataset.deleted_at is not None or dataset.status == "deleted":
+        raise AppError(
+            error_code="DATASET_DELETED",
+            failed_step="dataset_validation",
+            message=(
+                "This dataset was deleted from the active workspace. Existing dashboard "
+                "cards and history remain available, but semantic preparation cannot run from it."
+            ),
+            next_action="Upload or prepare another dataset.",
+            status_code=status.HTTP_410_GONE,
         )
 
     return dataset

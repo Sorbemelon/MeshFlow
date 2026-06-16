@@ -136,11 +136,17 @@ def _provider_summary(run: AiProviderRun) -> ProviderRunSummary:
 
 
 def _analysis_summary(run: AnalysisRun) -> AnalysisRunSummary:
+    dataset_deleted = (
+        run.dataset is None
+        or run.dataset.deleted_at is not None
+        or run.dataset.status == "deleted"
+    )
     return AnalysisRunSummary(
         id=run.id,
         demo_session_id=run.demo_session_id,
         dataset_id=run.dataset_id,
         dataset_name=run.dataset.name if run.dataset else None,
+        dataset_deleted=dataset_deleted,
         question=run.question,
         normalized_question=run.normalized_question,
         status=run.status,
@@ -270,6 +276,14 @@ def _load_analysis_run_for_session(
             next_action="Select an analysis run from this session.",
             status_code=status.HTTP_404_NOT_FOUND,
         )
+    if session.reset_at and run.created_at <= session.reset_at:
+        raise AppError(
+            error_code="ANALYSIS_RUN_NOT_FOUND",
+            failed_step="analysis_run",
+            message="The requested analysis run is no longer visible after reset.",
+            next_action="Generate a new analysis from the current workspace.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
     return run
 
 
@@ -289,7 +303,6 @@ def _load_ready_dataset(db: Session, session_id: str, dataset_id: str) -> Datase
         .where(
             Dataset.id == dataset_id,
             Dataset.demo_session_id == session_id,
-            Dataset.deleted_at.is_(None),
         )
         .options(
             selectinload(Dataset.question_suggestions),
@@ -305,6 +318,17 @@ def _load_ready_dataset(db: Session, session_id: str, dataset_id: str) -> Datase
             message="The attached dataset was not found for this demo session.",
             next_action="Attach a dataset from the current session.",
             status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if dataset.deleted_at is not None or dataset.status == "deleted":
+        raise AppError(
+            error_code="DATASET_DELETED",
+            failed_step="dataset_validation",
+            message=(
+                "This dataset was deleted from the active workspace. Existing dashboard "
+                "cards and history remain available, but new analysis cannot run from it."
+            ),
+            next_action="Upload or prepare another dataset.",
+            status_code=status.HTTP_410_GONE,
         )
     if dataset.status != "ready_for_analysis":
         raise AppError(
@@ -938,6 +962,8 @@ def list_analysis_runs(
 ) -> AnalysisRunListResponse:
     session = get_required_session(db, session_id)
     statement = select(AnalysisRun).where(AnalysisRun.demo_session_id == session.id)
+    if session.reset_at is not None:
+        statement = statement.where(AnalysisRun.created_at > session.reset_at)
     if dataset_id:
         statement = statement.where(AnalysisRun.dataset_id == dataset_id)
     runs = db.scalars(

@@ -17,6 +17,12 @@ class StorageUploadResult:
     storage_uri: str
 
 
+@dataclass(frozen=True)
+class CleanupOperationResult:
+    status: str
+    warning: str | None = None
+
+
 def _safe_file_name(file_name: str) -> str:
     name = PurePath(file_name).name.strip() or "upload.csv"
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", name)
@@ -116,3 +122,44 @@ def delete_s3_object(
         # Rollback cleanup is best-effort only. Upload service still reports the
         # real Snowflake failure that caused rollback.
         return
+
+
+def delete_s3_object_for_cleanup(
+    *,
+    storage_key: str | None,
+    config: Settings = settings,
+) -> CleanupOperationResult:
+    if not storage_key:
+        return CleanupOperationResult(status="skipped")
+
+    bucket = config.configured_s3_bucket
+    if not bucket:
+        return CleanupOperationResult(
+            status="not_configured",
+            warning="S3 cleanup skipped because no S3 bucket is configured.",
+        )
+
+    try:
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+    except ImportError:
+        return CleanupOperationResult(
+            status="failed",
+            warning="S3 cleanup could not run because boto3 is not installed.",
+        )
+
+    try:
+        client = boto3.client(
+            "s3",
+            region_name=config.aws_region,
+            aws_access_key_id=config.aws_access_key_id,
+            aws_secret_access_key=config.aws_secret_access_key,
+        )
+        client.delete_object(Bucket=bucket, Key=storage_key)
+    except (BotoCoreError, ClientError) as exc:
+        return CleanupOperationResult(
+            status="failed",
+            warning=f"S3 cleanup failed for object key {storage_key}: {exc.__class__.__name__}.",
+        )
+
+    return CleanupOperationResult(status="completed")

@@ -5,6 +5,7 @@ from app.db.session import get_db
 from app.schemas.dataset import (
     DatasetDataFlowResponse,
     DatasetDetailResponse,
+    DatasetDeleteResponse,
     DatasetListResponse,
     DatasetTransformRequest,
     DatasetTransformResponse,
@@ -18,6 +19,7 @@ from app.schemas.upload_preflight import UploadPreflightResponse
 from app.services.demo_session_service import DEMO_SESSION_HEADER
 from app.services.dataset_service import (
     create_raw_retail_demo_dataset,
+    delete_dataset,
     get_dataset_detail,
     get_dataset_profile,
     list_datasets,
@@ -52,6 +54,15 @@ def get_dataset(
     db: Session = Depends(get_db),
 ) -> DatasetDetailResponse:
     return get_dataset_detail(db, demo_session_id, dataset_id)
+
+
+@router.delete("/{dataset_id}", response_model=DatasetDeleteResponse)
+def remove_dataset(
+    dataset_id: str,
+    demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
+    db: Session = Depends(get_db),
+) -> DatasetDeleteResponse:
+    return delete_dataset(db, demo_session_id, dataset_id)
 
 
 @router.get("/{dataset_id}/profile", response_model=SchemaPreview)

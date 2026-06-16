@@ -220,8 +220,8 @@ def test_create_analysis_rejects_deleted_dataset(
 
     response = post_analysis(client, session_id, dataset_id=dataset_id)
 
-    assert response.status_code == 404
-    assert response.json()["error_code"] == "DATASET_NOT_FOUND"
+    assert response.status_code == 410
+    assert response.json()["error_code"] == "DATASET_DELETED"
 
 
 def test_provider_unavailable_returns_honest_failure_without_usage(

@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import { cn } from "@/lib/cn";
 import {
+  deleteDataset,
   getDatasetDataFlow,
   getDataset,
   MeshFlowApiError,
@@ -164,6 +165,8 @@ function DataFlowContent() {
   const [transformActionState, setTransformActionState] = useState<"idle" | "running">("idle");
   const [transformMessage, setTransformMessage] = useState<string | null>(null);
   const [transformNextRoute, setTransformNextRoute] = useState<string | null>(null);
+  const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const [mappingDrafts, setMappingDrafts] = useState<Record<string, MappingDraft>>({});
   const queryDatasetId = searchParams.get("datasetId") ?? "";
   const selectedDatasetId = useMemo(() => {
@@ -391,6 +394,47 @@ function DataFlowContent() {
     }
   }
 
+  async function handleDeleteDataset(dataset: DatasetSummary) {
+    if (!sessionId || deletingDatasetId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Remove "${datasetLabel(
+        dataset,
+      )}" from active dataset management? Existing dashboard cards and history remain available, and quota usage is not restored.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingDatasetId(dataset.id);
+    setDeleteMessage(null);
+
+    try {
+      const response = await deleteDataset(dataset.id, sessionId);
+      setManualDatasetId((current) => (current === dataset.id ? "" : current));
+      if (selectedDatasetId === dataset.id) {
+        setDatasetDetail(null);
+        setDataFlow(null);
+        setDetailState("idle");
+      }
+      await refresh();
+      const warningText = response.cleanup.warnings.length
+        ? ` Cleanup warnings: ${response.cleanup.warnings.join(" ")}`
+        : "";
+      setDeleteMessage(`${response.message}${warningText}`);
+    } catch (caught) {
+      setDeleteMessage(
+        caught instanceof MeshFlowApiError
+          ? caught.details.message
+          : "Dataset could not be removed from the active workspace.",
+      );
+    } finally {
+      setDeletingDatasetId(null);
+    }
+  }
+
   return (
     <div className="px-6 py-8">
       <header className="mb-6 flex items-center gap-3">
@@ -442,6 +486,58 @@ function DataFlowContent() {
                   {selectedDataset.row_count} rows, {selectedDataset.column_count} columns
                 </p>
               </div>
+            ) : null}
+            {datasets.length > 0 ? (
+              <div className="mt-3 rounded-md border border-border bg-surface-muted px-3 py-2">
+                <p className="text-xs font-semibold text-ink-muted">
+                  Active datasets
+                </p>
+                <div className="mt-2 grid gap-1.5">
+                  {datasets.map((dataset) => (
+                    <div
+                      key={dataset.id}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-2"
+                    >
+                      <span className="truncate text-xs font-medium text-ink-soft">
+                        {datasetLabel(dataset)}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={deletingDatasetId !== null}
+                        onClick={() => void handleDeleteDataset(dataset)}
+                        title="Remove dataset from the active workspace. Quota usage is not restored."
+                        className="cursor-pointer rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        aria-label={`Remove ${datasetLabel(dataset)}`}
+                      >
+                        <svg
+                          width={15}
+                          height={15}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth={1.9}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          aria-hidden
+                        >
+                          <path d="M3 6h18" />
+                          <path d="M8 6V4h8v2" />
+                          <path d="M19 6l-1 14H6L5 6" />
+                          <path d="M10 11v5M14 11v5" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[0.6875rem] leading-relaxed text-ink-muted">
+                  Existing dashboard cards and history remain available from stored snapshots.
+                </p>
+              </div>
+            ) : null}
+            {deleteMessage ? (
+              <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+                {deleteMessage}
+              </p>
             ) : null}
           </div>
 

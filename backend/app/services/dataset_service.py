@@ -21,6 +21,7 @@ from app.models.dataset import (
 from app.schemas.dataset import (
     ColumnProfileSummary,
     DatasetDetailResponse,
+    DatasetDeleteResponse,
     DatasetFileSummary,
     DatasetListResponse,
     DatasetSummary,
@@ -29,6 +30,7 @@ from app.schemas.dataset import (
 )
 from app.schemas.upload_preflight import ReadinessCheck
 from app.services import readiness_service, snowflake_service, storage_service
+from app.services.cleanup_service import soft_delete_dataset
 from app.services.demo_session_service import (
     configured_limits,
     get_required_session,
@@ -79,6 +81,7 @@ def dataset_summary(dataset: Dataset) -> DatasetSummary:
         column_count=dataset.column_count,
         raw_table_name=dataset.raw_table_name,
         created_at=dataset.created_at.isoformat(),
+        deleted_at=dataset.deleted_at.isoformat() if dataset.deleted_at else None,
     )
 
 
@@ -216,6 +219,16 @@ def _validation_error(errors: list[str], failed_step: str) -> AppError:
         message=message,
         next_action="Resolve the listed upload issue, then retry.",
         status_code=status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _dataset_not_found_error() -> AppError:
+    return AppError(
+        error_code="DATASET_NOT_FOUND",
+        failed_step="dataset",
+        message="The requested dataset was not found for this demo session.",
+        next_action="Select an available dataset from the workspace.",
+        status_code=status.HTTP_404_NOT_FOUND,
     )
 
 
@@ -488,7 +501,6 @@ def get_dataset_detail(
         .where(
             Dataset.id == dataset_id,
             Dataset.demo_session_id == session.id,
-            Dataset.deleted_at.is_(None),
         )
         .options(
             selectinload(Dataset.files),
@@ -499,13 +511,7 @@ def get_dataset_detail(
         )
     )
     if dataset is None:
-        raise AppError(
-            error_code="DATASET_NOT_FOUND",
-            failed_step="dataset",
-            message="The requested dataset was not found for this demo session.",
-            next_action="Select an available dataset from the workspace.",
-            status_code=status.HTTP_404_NOT_FOUND,
-        )
+        raise _dataset_not_found_error()
 
     dataset_file = dataset.files[0] if dataset.files else None
     return DatasetDetailResponse(
@@ -522,3 +528,35 @@ def get_dataset_profile(
     dataset_id: str,
 ) -> SchemaPreview:
     return get_dataset_detail(db, session_id, dataset_id).schema_preview
+
+
+def delete_dataset(
+    db: Session,
+    session_id: str | None,
+    dataset_id: str,
+    config: Settings = settings,
+) -> DatasetDeleteResponse:
+    session = get_required_session(db, session_id)
+    dataset = db.scalar(
+        select(Dataset)
+        .where(Dataset.id == dataset_id, Dataset.demo_session_id == session.id)
+        .options(selectinload(Dataset.files))
+    )
+    if dataset is None:
+        raise _dataset_not_found_error()
+
+    delete_status, cleanup = soft_delete_dataset(db, dataset, config)
+    db.commit()
+    message = (
+        "Dataset was removed from active workspace. Existing dashboard cards and history "
+        "remain available from stored snapshots."
+        if delete_status == "deleted"
+        else "Dataset was already removed from the active workspace. Quota usage was not restored."
+    )
+    return DatasetDeleteResponse(
+        status=delete_status,
+        dataset_id=dataset.id,
+        message=message,
+        quota_restored=False,
+        cleanup=cleanup,
+    )

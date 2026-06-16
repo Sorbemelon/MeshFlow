@@ -25,6 +25,17 @@ RESULT_GROUP_CARD_TYPE = "result_group"
 
 
 def dashboard_card_summary(card: DashboardCard) -> DashboardCardSummary:
+    snapshot_dataset = {}
+    if isinstance(card.card_snapshot_json, dict):
+        snapshot_value = card.card_snapshot_json.get("dataset")
+        if isinstance(snapshot_value, dict):
+            snapshot_dataset = snapshot_value
+    source_dataset_deleted = bool(
+        snapshot_dataset.get("deleted")
+        or card.dataset is None
+        or card.dataset.deleted_at is not None
+        or card.dataset.status == "deleted"
+    )
     return DashboardCardSummary(
         id=card.id,
         demo_session_id=card.demo_session_id,
@@ -36,6 +47,7 @@ def dashboard_card_summary(card: DashboardCard) -> DashboardCardSummary:
         subtitle=card.subtitle,
         dataset_name_snapshot=card.dataset_name_snapshot,
         source_model_snapshot=card.source_model_snapshot,
+        source_dataset_deleted=source_dataset_deleted,
         card_snapshot=card.card_snapshot_json,
         sort_order=card.sort_order,
         status=card.status,
@@ -99,14 +111,14 @@ def _card_not_found_error() -> AppError:
 
 def _load_analysis_run_for_card(
     db: Session,
-    session_id: str,
+    session: DemoSession,
     analysis_run_id: str,
 ) -> AnalysisRun:
     analysis_run = db.scalar(
         select(AnalysisRun)
         .where(
             AnalysisRun.id == analysis_run_id,
-            AnalysisRun.demo_session_id == session_id,
+            AnalysisRun.demo_session_id == session.id,
         )
         .options(
             selectinload(AnalysisRun.dataset),
@@ -121,6 +133,14 @@ def _load_analysis_run_for_card(
             failed_step="dashboard_card_source",
             message="The analysis run was not found for this demo session.",
             next_action="Select an analysis run from the current session.",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )
+    if session.reset_at and analysis_run.created_at <= session.reset_at:
+        raise AppError(
+            error_code="ANALYSIS_RUN_NOT_FOUND",
+            failed_step="dashboard_card_source",
+            message="The analysis run is no longer visible after reset.",
+            next_action="Generate a new analysis from the current workspace.",
             status_code=status.HTTP_404_NOT_FOUND,
         )
     return analysis_run
@@ -225,6 +245,15 @@ def build_result_group_snapshot(analysis_run: AnalysisRun) -> dict[str, Any]:
             "id": analysis_run.dataset_id,
             "name": dataset.name if dataset else None,
             "source_type": dataset.source_type if dataset else None,
+            "status": dataset.status if dataset else None,
+            "deleted": bool(
+                dataset is None
+                or dataset.deleted_at is not None
+                or dataset.status == "deleted"
+            ),
+            "deleted_at": dataset.deleted_at.isoformat()
+            if dataset and dataset.deleted_at
+            else None,
         },
         "analysis_run": {
             "id": analysis_run.id,
@@ -299,7 +328,7 @@ def create_dashboard_card_from_analysis_run(
     config: Settings = settings,
 ) -> DashboardCardMutationResponse:
     session = get_required_session(db, session_id)
-    analysis_run = _load_analysis_run_for_card(db, session.id, analysis_run_id)
+    analysis_run = _load_analysis_run_for_card(db, session, analysis_run_id)
     card, created = ensure_dashboard_card_for_analysis(db, session, analysis_run, config)
     db.commit()
     db.refresh(card)

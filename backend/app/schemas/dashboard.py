@@ -18,6 +18,7 @@ class DashboardCardSummary(BaseModel):
     subtitle: str | None = None
     dataset_name_snapshot: str | None = None
     source_model_snapshot: str | None = None
+    source_dataset_deleted: bool = False
     card_snapshot: dict[str, Any]
     sort_order: int
     status: DashboardCardStatus

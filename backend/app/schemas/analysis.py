@@ -43,6 +43,7 @@ class AnalysisRunSummary(BaseModel):
     demo_session_id: str
     dataset_id: str
     dataset_name: str | None = None
+    dataset_deleted: bool = False
     question: str
     normalized_question: str
     status: AnalysisRunStatus

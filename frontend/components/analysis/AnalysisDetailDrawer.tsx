@@ -210,6 +210,11 @@ export function AnalysisDetailDrawer({
                   <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700">
                     Dataset: {detail.analysis_run.dataset_name ?? detail.analysis_run.dataset_id}
                   </span>
+                  {detail.analysis_run.dataset_deleted ? (
+                    <span className="rounded-full border border-slate-300 bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">
+                      Dataset deleted
+                    </span>
+                  ) : null}
                   {detail.analysis_run.source_model ? (
                     <span className="rounded-full border border-indigo-200 bg-white px-2.5 py-1 text-indigo-700">
                       {detail.analysis_run.source_model}

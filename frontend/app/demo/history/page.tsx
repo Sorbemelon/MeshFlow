@@ -168,8 +168,13 @@ export default function HistoryPage() {
                     Created {formatDate(run.created_at)}
                   </p>
                 </div>
-                <div className="text-xs text-ink-muted">
-                  {run.dataset_name ?? run.dataset_id}
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+                  <span className="truncate">{run.dataset_name ?? run.dataset_id}</span>
+                  {run.dataset_deleted ? (
+                    <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+                      Dataset deleted
+                    </span>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   <span

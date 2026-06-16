@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.dataset import CleanupSummary
 from app.schemas.limits import DemoLimits, DemoUsage
 
 
@@ -28,4 +29,7 @@ class DemoSessionResetResponse(BaseModel):
     limits: DemoLimits
     usage: DemoUsage
     usage_reset: bool
+    workspace_cleared: bool = True
+    quota_restored: bool = False
+    cleanup: CleanupSummary
     message: str
