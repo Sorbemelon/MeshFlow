@@ -83,6 +83,54 @@ export type LimitsResponse = {
   usage: DemoUsage | null;
 };
 
+export type PreflightStatus = "ready" | "blocked" | "failed";
+export type ReadinessStatus =
+  | "ready"
+  | "not_configured"
+  | "failed"
+  | "not_checked";
+
+export type UploadFileValidation = {
+  file_name: string;
+  size_bytes: number;
+  size_mb: number;
+  extension: string;
+  detected_format: string | null;
+  valid: boolean;
+  row_count_previewed: number;
+  column_count: number;
+  headers: string[];
+  warnings: string[];
+  errors: string[];
+};
+
+export type UploadQuotaSummary = {
+  uploaded_datasets_used: number;
+  uploaded_datasets_limit: number;
+  total_upload_mb_used: number;
+  total_upload_mb_limit: number;
+  file_size_mb_limit: number;
+  errors: string[];
+};
+
+export type ReadinessCheck = {
+  status: ReadinessStatus;
+  message: string;
+  next_action: string | null;
+};
+
+export type UploadPreflightResponse = {
+  status: PreflightStatus;
+  can_upload: boolean;
+  file: UploadFileValidation;
+  quota: UploadQuotaSummary;
+  readiness: {
+    s3: ReadinessCheck;
+    snowflake: ReadinessCheck;
+  };
+  message: string;
+};
+
 export type StructuredApiError = {
   status?: "failed";
   error_code: string;
@@ -136,6 +184,7 @@ async function request<T>(
   options: {
     method?: "GET" | "POST";
     sessionId?: string | null;
+    body?: BodyInit;
   } = {},
 ): Promise<T> {
   const headers = new Headers();
@@ -149,6 +198,7 @@ async function request<T>(
     response = await fetch(`${apiBaseUrl()}${path}`, {
       method: options.method ?? "GET",
       headers,
+      body: options.body,
       cache: "no-store",
     });
   } catch {
@@ -207,6 +257,20 @@ export function getWorkspace(sessionId: string): Promise<WorkspaceResponse> {
 
 export function getLimits(sessionId?: string | null): Promise<LimitsResponse> {
   return request<LimitsResponse>("/limits", { sessionId });
+}
+
+export function uploadPreflight(
+  file: File,
+  sessionId: string,
+): Promise<UploadPreflightResponse> {
+  const formData = new FormData();
+  formData.set("file", file);
+
+  return request<UploadPreflightResponse>("/datasets/upload/preflight", {
+    method: "POST",
+    sessionId,
+    body: formData,
+  });
 }
 
 export function isSessionInvalidError(error: unknown): boolean {

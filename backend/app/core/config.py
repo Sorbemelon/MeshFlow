@@ -57,9 +57,13 @@ class Settings(BaseSettings):
     # Future phases only.
     aws_region: str | None = Field(default=None, alias="AWS_REGION")
     aws_s3_bucket: str | None = Field(default=None, alias="AWS_S3_BUCKET")
+    s3_bucket_name: str | None = Field(default=None, alias="S3_BUCKET_NAME")
+    aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str | None = Field(default=None, alias="AWS_SECRET_ACCESS_KEY")
 
     snowflake_account: str | None = Field(default=None, alias="SNOWFLAKE_ACCOUNT")
     snowflake_user: str | None = Field(default=None, alias="SNOWFLAKE_USER")
+    snowflake_password: str | None = Field(default=None, alias="SNOWFLAKE_PASSWORD")
     snowflake_role: str | None = Field(default=None, alias="SNOWFLAKE_ROLE")
     snowflake_warehouse: str | None = Field(default=None, alias="SNOWFLAKE_WAREHOUSE")
     snowflake_database: str | None = Field(default=None, alias="SNOWFLAKE_DATABASE")
@@ -77,6 +81,10 @@ class Settings(BaseSettings):
             for origin in self.backend_cors_origins.split(",")
             if origin.strip()
         ]
+
+    @property
+    def configured_s3_bucket(self) -> str | None:
+        return self.s3_bucket_name or self.aws_s3_bucket
 
 
 @lru_cache(maxsize=1)
