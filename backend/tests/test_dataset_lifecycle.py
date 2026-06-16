@@ -479,7 +479,25 @@ def test_missing_external_config_is_reported_as_skipped_not_fake_success(
     db_session.commit()
     dataset = create_dataset(db_session, session_id)
 
-    cleanup = cleanup_dataset_external_resources(dataset, Settings())
+    cleanup = cleanup_dataset_external_resources(
+        dataset,
+        Settings(
+            _env_file=None,
+            AWS_REGION=None,
+            AWS_S3_BUCKET=None,
+            S3_BUCKET_NAME=None,
+            AWS_ACCESS_KEY_ID=None,
+            AWS_SECRET_ACCESS_KEY=None,
+            SNOWFLAKE_ACCOUNT=None,
+            SNOWFLAKE_USER=None,
+            SNOWFLAKE_PASSWORD=None,
+            SNOWFLAKE_ROLE=None,
+            SNOWFLAKE_WAREHOUSE=None,
+            SNOWFLAKE_DATABASE=None,
+            SNOWFLAKE_SCHEMA=None,
+            SNOWFLAKE_STAGE_NAME=None,
+        ),
+    )
 
     assert cleanup.s3 == "not_configured"
     assert cleanup.snowflake == "not_configured"
