@@ -2,7 +2,7 @@
 generated_by: scopian
 generator_schema: v0.2-B
 view: main
-generated_at: 2026-06-16T03:36:56+07:00
+generated_at: 2026-06-18T12:43:49+07:00
 non_canonical: true
 generated_mode: single
 canonical_inputs:
@@ -14,7 +14,7 @@ canonical_inputs:
 input_hashes:
   view: sha256:d8813ce52fd6
   sources: sha256:4a0593b28507
-  buffer: sha256:121182b3e658
+  buffer: sha256:fbe41a37ce33
   context: sha256:5ef45bc1a5d7
   registry: sha256:b41cce7544f0
 ---
@@ -31,7 +31,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - view: main
 - view_path: docs/scopian/views/main/VIEW.md
-- generated_at: 2026-06-16T03:36:56+07:00
+- generated_at: 2026-06-18T12:43:49+07:00
 
 ## Selected Sources
 
@@ -53,6 +53,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 ## Approved Buffer Summary
 
 - 2026-06-16T03:36:40+07:00 DEC-20260616-0336-user-demo-limit-correction-AW5Q: Title: Align analysis-run limit with dashboard-card limit Decision: MeshFlow v2 now uses 8 successful analysis runs and 8 dashboard card ... (docs/scopian/views/main/buffer/decisions/DEC-20260616-0336-user-demo-limit-correction-AW5Q.md)
+- 2026-06-18T12:43:44+07:00 DEC-20260618-1243-user-revise-ai-provider-routing-and-m-3PZH: MeshFlow now uses two active Gemini API keys and two active Gemini models. GEMINI_API_KEY_3 and GEMINI_MODEL_3 are removed from the acti ... (docs/scopian/views/main/buffer/decisions/DEC-20260618-1243-user-revise-ai-provider-routing-and-m-3PZH.md)
 
 ## Scope Checklist
 
@@ -122,6 +123,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 | ITEM-allowed-with-limits-don-t-don-t-show-any-fake-succes-68f4a70b | allowed_with_limits | Don't:: **Don't** show any fake success: no fake dataset, fake chart data, fake insight, fake fallback dashboard, or fake generated suggestions. Report miss ... | DESIGN.md#don-t | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-get-api-v1-workspace-c2b72bb1 | allowed_with_limits | GET /api/v1/workspace | docs/scopian/sources/API_CONTRACT.md#get-api-v1-workspace | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-hierarchy-display-700-clamp-2rem-a9511a97 | allowed_with_limits | Hierarchy: **Display** (700, clamp(2rem → 3.5rem), 1.05, -0.02em): Landing hero headline only. Capped well under the 6rem ceiling; `text-wrap: balance`.; ** ... | DESIGN.md#hierarchy | none | not_checked_in_generated_view |
+| ITEM-allowed-with-limits-meshflow-now-uses-two-active-gem-d65c854f | allowed_with_limits | MeshFlow now uses two active Gemini API keys and two active Gemini models. GEMINI_API_KEY_3 and GEMINI_MODEL_3 are removed from the acti ... | docs/scopian/views/main/buffer/decisions/DEC-20260618-1243-user-revise-ai-provider-routing-and-m-3PZH.md | approved_buffer | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-meshflow-v2-frontend-ux-scope-25819ffa | allowed_with_limits | MeshFlow v2 Frontend UX Scope | docs/scopian/sources/FRONTEND_UX_SCOPE.md#meshflow-v2-frontend-ux-scope | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-meshflow-v2-warehouse-and-dbt-ex-c89bc7d2 | allowed_with_limits | MeshFlow v2 Warehouse and dbt Execution | docs/scopian/sources/WAREHOUSE_DBT_EXECUTION.md#meshflow-v2-warehouse-and-dbt-execution | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-named-rules-6553be1c | allowed_with_limits | Named Rules | DESIGN.md#named-rules | none | not_checked_in_generated_view |
@@ -146,7 +148,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 ## Coverage Snapshot
 
 - likely_in_scope: 20
-- allowed_with_limits: 49
+- allowed_with_limits: 50
 - likely_out_of_scope: 11
 - decision_required: 2
 - conflict_detected: 2
@@ -162,15 +164,15 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 ## Changelog Snapshot
 
-- generated_refresh: 2026-06-16T03:36:56+07:00
+- generated_refresh: 2026-06-18T12:43:49+07:00
 - selected_sources: 14
-- approved_buffer_records: 1
+- approved_buffer_records: 2
 
 ## Freshness Metadata
 
 - view: sha256:d8813ce52fd6
 - sources: sha256:4a0593b28507
-- buffer: sha256:121182b3e658
+- buffer: sha256:fbe41a37ce33
 - context: sha256:5ef45bc1a5d7
 - registry: sha256:b41cce7544f0
 
