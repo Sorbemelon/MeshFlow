@@ -149,6 +149,24 @@ function buildMappingDrafts(detail: DatasetDetailResponse): Record<string, Mappi
   return drafts;
 }
 
+function dataFlowTabDescription(tab: string): string {
+  if (tab === "Warehouse Raw") {
+    return "Warehouse Raw table and profiled columns from the live Snowflake load.";
+  }
+  if (tab === "Transformations") {
+    return "dbt staging and intermediate model evidence from the latest transform run.";
+  }
+  if (tab === "Dimensional Model & Data Marts") {
+    return "Dimensional model and Data Mart outputs recorded after dbt succeeds.";
+  }
+
+  return "Real deterministic profile from the raw CSV loaded into Snowflake Warehouse Raw.";
+}
+
+function modelLayerLabel(layer: string): string {
+  return layer.replaceAll("_", " ");
+}
+
 function DataFlowContent() {
   const searchParams = useSearchParams();
   const { refresh, sessionId, workspace } = useWorkspaceSession();
@@ -168,6 +186,7 @@ function DataFlowContent() {
   const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const [mappingDrafts, setMappingDrafts] = useState<Record<string, MappingDraft>>({});
+  const [activeTab, setActiveTab] = useState(TABS[0]);
   const queryDatasetId = searchParams.get("datasetId") ?? "";
   const selectedDatasetId = useMemo(() => {
     if (datasets.length === 0) {
@@ -219,6 +238,8 @@ function DataFlowContent() {
       ) ?? [];
     return new Map<string, SemanticColumnSummary>(pairs);
   }, [activeDatasetDetail?.semantic_preparation.semantic_columns]);
+  const transformationModels = dataFlow?.models ?? {};
+  const hasTransformationModels = Object.keys(transformationModels).length > 0;
 
   useEffect(() => {
     if (!sessionId || !selectedDatasetId) {
@@ -593,20 +614,17 @@ function DataFlowContent() {
             aria-label="Data Flow views"
             className="mb-4 flex flex-wrap gap-0 border-b border-border"
           >
-            {TABS.map((tab, i) => {
-              const active = i === 0;
+            {TABS.map((tab) => {
+              const active = tab === activeTab;
               return (
                 <button
                   key={tab}
                   type="button"
                   role="tab"
-                  disabled={!hasDataset || !active}
+                  disabled={!hasDataset}
                   aria-selected={active}
-                  title={
-                    active
-                      ? "Schema preview is available after upload."
-                      : "dbt transformation evidence appears after Transform succeeds."
-                  }
+                  onClick={() => setActiveTab(tab)}
+                  title={dataFlowTabDescription(tab)}
                   className={cn(
                     "-mb-px border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors duration-150",
                     active
@@ -640,10 +658,10 @@ function DataFlowContent() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold text-ink">
-                    Schema Preview
+                    {activeTab}
                   </h2>
                   <p className="mt-1 text-sm text-ink-muted">
-                    Real deterministic profile from the raw CSV loaded into Snowflake Warehouse Raw.
+                    {dataFlowTabDescription(activeTab)}
                   </p>
                 </div>
                 <StatusBadge
@@ -702,6 +720,154 @@ function DataFlowContent() {
                       </p>
                     </div>
                   </div>
+
+                  {activeTab === "Warehouse Raw" ? (
+                    <div className="mt-4 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-md border border-blue-100 bg-surface px-3 py-2">
+                          <p className="text-xs font-semibold text-blue-700">
+                            Raw table
+                          </p>
+                          <p className="mt-1 break-all font-mono text-xs text-ink-soft">
+                            {activeDatasetDetail.dataset.raw_table_name}
+                          </p>
+                        </div>
+                        <div className="rounded-md border border-blue-100 bg-surface px-3 py-2">
+                          <p className="text-xs font-semibold text-blue-700">
+                            Load result
+                          </p>
+                          <p className="mt-1 font-mono text-xs text-ink-soft">
+                            {activeDatasetDetail.dataset.row_count} rows /{" "}
+                            {activeDatasetDetail.dataset.column_count} columns
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 overflow-x-auto rounded-md border border-blue-100">
+                        <table className="min-w-[720px] divide-y divide-border text-left text-sm">
+                          <thead className="bg-surface-muted text-xs font-semibold text-ink-muted">
+                            <tr>
+                              <th className="px-3 py-2">Raw column</th>
+                              <th className="px-3 py-2">Snowflake column</th>
+                              <th className="px-3 py-2">Detected type</th>
+                              <th className="px-3 py-2">Samples</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border bg-surface">
+                            {activeDatasetDetail.schema_preview.columns.map((column) => (
+                              <tr key={column.id}>
+                                <td className="px-3 py-2 font-mono text-xs text-ink">
+                                  {column.raw_column_name}
+                                </td>
+                                <td className="px-3 py-2 font-mono text-xs text-ink-soft">
+                                  {column.snowflake_column_name}
+                                </td>
+                                <td className="px-3 py-2 text-xs text-ink-soft">
+                                  {column.detected_type}
+                                </td>
+                                <td className="max-w-[300px] px-3 py-2 font-mono text-xs text-ink-muted">
+                                  {column.sample_values.length
+                                    ? column.sample_values.join(", ")
+                                    : "No non-null sample"}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {activeTab === "Transformations" ? (
+                    <div className="mt-4 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-ink">
+                          Staging and intermediate models
+                        </p>
+                        {dataFlow?.transformation ? (
+                          <StatusBadge
+                            status={
+                              dataFlow.transformation.status === "completed"
+                                ? "ready"
+                                : dataFlow.transformation.status === "failed"
+                                  ? "failed"
+                                  : "running"
+                            }
+                            label={dataFlow.transformation.status.replaceAll("_", " ")}
+                          />
+                        ) : null}
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {["staging", "intermediate"].map((layer) => (
+                          <div
+                            key={layer}
+                            className="rounded-md border border-blue-100 bg-surface px-3 py-2"
+                          >
+                            <p className="text-xs font-semibold uppercase tracking-normal text-blue-700">
+                              {modelLayerLabel(layer)}
+                            </p>
+                            <p className="mt-1 font-mono text-xs leading-relaxed text-ink-soft">
+                              {transformationModels[layer]?.length
+                                ? transformationModels[layer].join(", ")
+                                : "No models recorded yet"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 grid gap-2">
+                        {dataFlow?.nodes.map((node) => (
+                          <div
+                            key={node.id}
+                            className="flex items-center justify-between rounded-md border border-blue-100 bg-surface px-3 py-2"
+                          >
+                            <span className="text-xs font-medium text-ink-soft">
+                              {node.label}
+                            </span>
+                            <span className="font-mono text-xs text-ink-muted">
+                              {node.status.replaceAll("_", " ")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {activeTab === "Dimensional Model & Data Marts" ? (
+                    <div className="mt-4 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-ink">
+                          Dimensional model and Data Marts
+                        </p>
+                        {isReadyForAnalysis ? (
+                          <StatusBadge status="ready" label="Ready for analysis" />
+                        ) : (
+                          <StatusBadge status="waiting" label="Not ready" />
+                        )}
+                      </div>
+                      <div className="mt-3 grid gap-2 md:grid-cols-2">
+                        {["dimensional_model", "data_marts"].map((layer) => (
+                          <div
+                            key={layer}
+                            className="rounded-md border border-blue-100 bg-surface px-3 py-2"
+                          >
+                            <p className="text-xs font-semibold uppercase tracking-normal text-blue-700">
+                              {modelLayerLabel(layer)}
+                            </p>
+                            <p className="mt-1 font-mono text-xs leading-relaxed text-ink-soft">
+                              {transformationModels[layer]?.length
+                                ? transformationModels[layer].join(", ")
+                                : "No models recorded yet"}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      {dataFlow?.artifacts.length ? (
+                        <p className="mt-3 text-xs text-ink-muted">
+                          {dataFlow.artifacts.length} redacted dbt artifacts are available in
+                          backend evidence for this transform run.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   {semanticPreparation ? (
                     <div
@@ -988,13 +1154,13 @@ function DataFlowContent() {
                     </div>
                   ) : null}
 
-                  {dataFlow?.models && Object.keys(dataFlow.models).length > 0 ? (
+                  {hasTransformationModels ? (
                     <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-ink">
                           dbt transformation evidence
                         </p>
-                        {dataFlow.transformation ? (
+                        {dataFlow?.transformation ? (
                           <StatusBadge
                             status={
                               dataFlow.transformation.status === "completed"
@@ -1008,13 +1174,13 @@ function DataFlowContent() {
                         ) : null}
                       </div>
                       <div className="mt-3 grid gap-2 md:grid-cols-2">
-                        {Object.entries(dataFlow.models).map(([layer, models]) => (
+                        {Object.entries(transformationModels).map(([layer, models]) => (
                           <div
                             key={layer}
                             className="rounded-md border border-blue-100 bg-surface px-3 py-2"
                           >
                             <p className="text-xs font-semibold uppercase tracking-normal text-blue-700">
-                              {layer.replaceAll("_", " ")}
+                              {modelLayerLabel(layer)}
                             </p>
                             <p className="mt-1 font-mono text-xs leading-relaxed text-ink-soft">
                               {models.length ? models.join(", ") : "No models recorded"}
@@ -1022,36 +1188,14 @@ function DataFlowContent() {
                           </div>
                         ))}
                       </div>
-                      {dataFlow.artifacts.length > 0 ? (
+                      {(dataFlow?.artifacts.length ?? 0) > 0 ? (
                         <p className="mt-3 text-xs text-ink-muted">
-                          {dataFlow.artifacts.length} redacted dbt artifacts stored for review.
+                          {dataFlow?.artifacts.length} redacted dbt artifacts stored for review.
                         </p>
                       ) : null}
                     </div>
                   ) : null}
 
-                  {semanticPreparation?.suggested_questions.length ? (
-                    <div className="mt-3 rounded-md border border-indigo-200 bg-indigo-50/40 px-3 py-3">
-                      <p className="text-sm font-semibold text-ink">
-                        Prepared question suggestions
-                      </p>
-                      <ul className="mt-2 grid gap-2">
-                        {semanticPreparation.suggested_questions.map((question) => (
-                          <li
-                            key={question.id}
-                            className="rounded-md border border-indigo-100 bg-surface px-3 py-2 text-xs text-ink-soft"
-                          >
-                            {question.question}
-                            {question.intent ? (
-                              <span className="ml-2 font-mono text-[0.6875rem] text-indigo-600">
-                                {question.intent}
-                              </span>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
                 </>
               ) : null}
             </div>

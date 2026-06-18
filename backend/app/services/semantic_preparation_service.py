@@ -34,7 +34,6 @@ from app.services.demo_session_service import get_required_session
 
 TASK_TYPE = "semantic_preparation"
 TEMPERATURE = 0.1
-MAX_QUESTIONS = 5
 SAFE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 ALLOWED_SEMANTIC_ROLES = {
     "identifier",
@@ -65,6 +64,21 @@ class ProviderCandidate:
     model: str | None
 
 
+def gemini_key_candidates(
+    lane_prefix: str,
+    model: str | None,
+    config: Settings = settings,
+) -> list[ProviderCandidate]:
+    return [
+        ProviderCandidate(f"{lane_prefix}_key_1", "gemini", config.gemini_api_key_1, model),
+        ProviderCandidate(f"{lane_prefix}_key_2", "gemini", config.gemini_api_key_2, model),
+    ]
+
+
+def openai_candidate(lane_name: str, config: Settings = settings) -> ProviderCandidate:
+    return ProviderCandidate(lane_name, "openai", config.openai_api_key, config.openai_model)
+
+
 @dataclass
 class ValidatedColumnSuggestion:
     column_profile: ColumnProfile
@@ -76,23 +90,15 @@ class ValidatedColumnSuggestion:
 
 
 @dataclass
-class ValidatedQuestionSuggestion:
-    question: str
-    intent: str | None
-
-
-@dataclass
 class ValidatedSemanticOutput:
     columns: list[ValidatedColumnSuggestion]
-    questions: list[ValidatedQuestionSuggestion]
 
 
 def provider_candidates(config: Settings = settings) -> list[ProviderCandidate]:
     return [
-        ProviderCandidate("gemini_lane_1", "gemini", config.gemini_api_key_1, config.gemini_model_1),
-        ProviderCandidate("gemini_lane_2", "gemini", config.gemini_api_key_2, config.gemini_model_2),
-        ProviderCandidate("gemini_lane_3", "gemini", config.gemini_api_key_3, config.gemini_model_3),
-        ProviderCandidate("openai_fallback", "openai", config.openai_api_key, config.openai_model),
+        *gemini_key_candidates("gemini_model_1", config.gemini_model_1, config),
+        openai_candidate("openai_fallback", config),
+        *gemini_key_candidates("gemini_model_2", config.gemini_model_2, config),
     ]
 
 
@@ -158,7 +164,7 @@ def semantic_preparation_summary_from_dataset(
             or "AI semantic preparation failed. No fake suggestions were stored."
         )
         next_action = "Configure an AI provider or retry semantic preparation later."
-    elif semantic_columns or questions:
+    elif semantic_columns:
         response_status = "completed"
         message = "Semantic suggestions are ready for review."
         next_action = None
@@ -251,6 +257,22 @@ def _profile_context(profile: ColumnProfile) -> dict[str, object]:
 
 
 def build_semantic_prompt(dataset: Dataset) -> str:
+    role_hints = {
+        "identifier": [
+            "stable keys and id columns such as customer_id, product_id, order_id, invoice_line_id",
+        ],
+        "date_time": ["business event dates such as order_date, invoice_date, ship_date"],
+        "measure_column": [
+            "numeric additive values such as revenue, cost, quantity, discount_amount, gross_margin",
+        ],
+        "metric_candidate": [
+            "numeric fields that may become metrics but need review before modeling",
+        ],
+        "dimension": [
+            "descriptive attributes such as customer_segment, product_category, region, channel",
+        ],
+        "unknown": ["ambiguous columns whose business meaning is not clear from the profile"],
+    }
     context = {
         "dataset": {
             "name": dataset.name,
@@ -259,9 +281,18 @@ def build_semantic_prompt(dataset: Dataset) -> str:
             "row_count": dataset.row_count,
             "column_count": dataset.column_count,
         },
+        "role_hints": role_hints,
+        "quality_priorities": [
+            "Prefer stable physical meaning over guessing business semantics.",
+            "Use identifier for id/key columns even if sample values look numeric.",
+            "Use date_time for parsed dates or date-like business event fields.",
+            "Use measure_column for additive numeric fields used in facts and marts.",
+            "Use dimension for categorical descriptors and labels.",
+            "Use unknown with needs_review=true when a column cannot be classified honestly.",
+        ],
         "known_limits": [
-            "Only Warehouse Raw and deterministic schema profiling exist right now.",
-            "dbt transformations, Data Marts, dashboard analysis, and charts are not ready.",
+            "Only Warehouse Raw and deterministic schema profiling are available to this task.",
+            "This task only maps columns. It must not suggest analysis questions.",
             "Do not invent columns, business facts, or provider evidence.",
         ],
         "columns": [_profile_context(profile) for profile in dataset.column_profiles],
@@ -271,16 +302,10 @@ def build_semantic_prompt(dataset: Dataset) -> str:
             {
                 "raw_column_name": "existing column name only",
                 "suggested_name": "safe_snake_case_name",
-                "semantic_role": sorted(ALLOWED_SEMANTIC_ROLES),
+                "semantic_role": "exactly one allowed role string",
                 "confidence": "number between 0 and 1",
                 "needs_review": "boolean",
                 "reason": "short reason",
-            }
-        ],
-        "suggested_questions": [
-            {
-                "question": "concise dataset-specific question for future analysis",
-                "intent": "optional_snake_case_intent",
             }
         ],
         "warnings": [],
@@ -288,11 +313,18 @@ def build_semantic_prompt(dataset: Dataset) -> str:
     return (
         "You are preparing semantic schema suggestions for MeshFlow.\n"
         "Return JSON only. Do not include markdown.\n"
+        "Classify every provided column exactly once.\n"
         "Use needs_review=true when business meaning is uncertain, confidence is low, "
         "or semantic_role is unknown.\n"
+        "Set confidence lower when a sample value alone is not enough to prove meaning.\n"
+        "Keep suggested_name conservative: normalized snake_case of the actual column meaning.\n"
+        "For every column object, semantic_role must be exactly one string value from "
+        "the allowed semantic roles, not an array or object.\n"
+        "suggested_name, raw_column_name, and reason must be strings.\n"
         "Do not invent columns. Every raw_column_name must match the provided context.\n"
         "Do not claim transformations, Data Marts, analysis, charts, or dashboards are ready.\n"
-        "Suggested questions should be answerable after future transformation from this dataset.\n"
+        "Do not return suggested_questions. Suggested analysis questions are generated later "
+        "after dbt Data Marts exist.\n"
         f"Allowed semantic roles: {', '.join(sorted(ALLOWED_SEMANTIC_ROLES))}.\n"
         f"Output schema: {json.dumps(schema, separators=(',', ':'))}\n"
         f"Context: {json.dumps(context, separators=(',', ':'))}"
@@ -400,24 +432,6 @@ def _safe_text(value: Any, *, max_length: int) -> str:
     return text
 
 
-def _validate_question(value: Any) -> ValidatedQuestionSuggestion:
-    if not isinstance(value, dict):
-        raise SemanticOutputValidationError("Suggested question must be an object.")
-    question = _safe_text(value.get("question"), max_length=160)
-    lowered = question.lower()
-    if "?" not in question:
-        raise SemanticOutputValidationError("Suggested questions must be phrased as questions.")
-    if re.search(r"(data marts?|dashboard|chart).{0,40}ready", lowered):
-        raise SemanticOutputValidationError("Suggested question claims a future artifact is ready.")
-    intent_value = value.get("intent")
-    intent = None
-    if intent_value is not None:
-        intent = _safe_text(intent_value, max_length=128)
-        if not SAFE_NAME_RE.fullmatch(intent):
-            raise SemanticOutputValidationError("Suggested question intent is not safe.")
-    return ValidatedQuestionSuggestion(question=question, intent=intent)
-
-
 def validate_provider_output(raw_text: str, profiles: list[ColumnProfile]) -> ValidatedSemanticOutput:
     lowered = raw_text.lower()
     if "api_key" in lowered or "secret" in lowered:
@@ -432,11 +446,8 @@ def validate_provider_output(raw_text: str, profiles: list[ColumnProfile]) -> Va
         raise SemanticOutputValidationError("Provider output must be a JSON object.")
 
     columns_value = body.get("columns")
-    questions_value = body.get("suggested_questions", [])
     if not isinstance(columns_value, list) or not columns_value:
         raise SemanticOutputValidationError("Provider output must include suggested columns.")
-    if not isinstance(questions_value, list):
-        raise SemanticOutputValidationError("Suggested questions must be a list.")
 
     profiles_by_raw_name = {profile.raw_column_name: profile for profile in profiles}
     suggestions: list[ValidatedColumnSuggestion] = []
@@ -477,8 +488,7 @@ def validate_provider_output(raw_text: str, profiles: list[ColumnProfile]) -> Va
             )
         )
 
-    questions = [_validate_question(value) for value in questions_value[:MAX_QUESTIONS]]
-    return ValidatedSemanticOutput(columns=suggestions, questions=questions)
+    return ValidatedSemanticOutput(columns=suggestions)
 
 
 def _provider_run(
@@ -504,11 +514,9 @@ def _provider_run(
     )
 
 
-def _clear_existing_suggestions(db: Session, dataset: Dataset) -> None:
+def _clear_existing_semantic_columns(db: Session, dataset: Dataset) -> None:
     for semantic_column in list(dataset.semantic_columns):
         db.delete(semantic_column)
-    for question in list(dataset.question_suggestions):
-        db.delete(question)
 
 
 def _store_validated_output(
@@ -535,18 +543,6 @@ def _store_validated_output(
             )
         )
 
-    for index, question in enumerate(output.questions):
-        db.add(
-            DatasetQuestionSuggestion(
-                dataset=dataset,
-                question=question.question,
-                intent=question.intent,
-                sort_order=index,
-                provider_name=provider.provider_name,
-                provider_model=provider.model,
-            )
-        )
-
 
 def get_semantic_preparation(
     db: Session,
@@ -568,7 +564,7 @@ def run_semantic_preparation(
     dataset = _load_dataset_for_session(db, session_id, dataset_id)
     _ensure_dataset_has_profiles(dataset)
 
-    if (dataset.semantic_columns or dataset.question_suggestions) and not force:
+    if dataset.semantic_columns and not force:
         return semantic_preparation_summary_from_dataset(dataset)
 
     prompt = build_semantic_prompt(dataset)
@@ -621,7 +617,7 @@ def run_semantic_preparation(
             )
             continue
 
-        _clear_existing_suggestions(db, dataset)
+        _clear_existing_semantic_columns(db, dataset)
         _store_validated_output(db=db, dataset=dataset, output=validated, provider=candidate)
         db.add(
             _provider_run(

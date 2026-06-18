@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import re
 import shutil
 import subprocess
@@ -36,6 +37,14 @@ from app.schemas.upload_preflight import ReadinessCheck
 from app.services import readiness_service, snowflake_service
 from app.services.dataset_service import RAW_RETAIL_DEMO_SOURCE_TYPE, dataset_summary
 from app.services.demo_session_service import get_required_session
+from app.services.modeling_proposal_service import (
+    ValidatedModelDimension,
+    ValidatedModelingProposal,
+    create_modeling_proposal,
+    proposal_analysis_catalog,
+    proposal_to_json,
+)
+from app.services.question_suggestion_service import generate_dataset_question_suggestions
 
 
 SAFE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -76,6 +85,7 @@ KNOWN_DBT_MODEL_TABLES = {
     for model_group in [*RAW_RETAIL_MODELS.values(), *GENERIC_UPLOADED_MODELS.values()]
     for model_name in model_group
 }
+GENERATED_MODEL_PREFIXES = ("stg_", "int_", "fact_", "dim_", "mart_")
 
 
 class DbtExecutionError(Exception):
@@ -109,6 +119,8 @@ class GeneratedDbtProject:
     profile_name: str
     models: dict[str, list[str]]
     artifacts: list[tuple[str, str, str, str, Path | None]]
+    modeling_proposal: dict[str, object] | None = None
+    analysis_catalog: dict[str, dict[str, object]] | None = None
 
 
 @dataclass(frozen=True)
@@ -360,7 +372,6 @@ def _redact(text: str, config: Settings) -> str:
         config.openai_api_key,
         config.gemini_api_key_1,
         config.gemini_api_key_2,
-        config.gemini_api_key_3,
     ]
     for secret in secret_values:
         if secret:
@@ -611,46 +622,153 @@ group by 1, 2
     }
 
 
-def _generic_models(mappings: list[SemanticMapping]) -> dict[str, list[str]]:
-    return GENERIC_UPLOADED_MODELS
+def _generic_models(proposal: ValidatedModelingProposal) -> dict[str, list[str]]:
+    return {
+        "staging": ["stg_uploaded"],
+        "intermediate": ["int_uploaded_enriched"],
+        "dimensional_model": [
+            proposal.fact_table_name,
+            *[dimension.name for dimension in proposal.dimensions],
+        ],
+        "data_marts": [mart.name for mart in proposal.marts],
+    }
 
 
-def _generic_sql(dataset: Dataset, mappings: list[SemanticMapping]) -> dict[str, str]:
+def _unique_names(names: list[str]) -> list[str]:
+    return list(dict.fromkeys(names))
+
+
+def _sql_select_line(name: str, *, source: str | None = None) -> str:
+    source_name = source or name
+    return f"  {source_name} as {name}"
+
+
+def _date_month_name(date_column: str) -> str:
+    return f"{date_column}_month"
+
+
+def _numeric_mapping_names(mappings: list[SemanticMapping]) -> set[str]:
+    return {
+        mapping.approved_name
+        for mapping in mappings
+        if mapping.approved_role in {"measure_column", "metric_candidate"}
+        or mapping.profile.detected_type in {"integer", "decimal"}
+    }
+
+
+def _date_mapping_names(mappings: list[SemanticMapping]) -> set[str]:
+    return {
+        mapping.approved_name
+        for mapping in mappings
+        if mapping.approved_role == "date_time" or mapping.profile.detected_type == "date"
+    }
+
+
+def _generic_sql(
+    dataset: Dataset,
+    mappings: list[SemanticMapping],
+    proposal: ValidatedModelingProposal,
+) -> dict[str, str]:
     raw_relation = _raw_relation(dataset)
     select_lines = [
         f"  nullif(trim({snowflake_service.quote_identifier(mapping.profile.snowflake_column_name)}), '') "
         f"as {mapping.approved_name}"
         for mapping in mappings
     ]
-    measure = next(
-        mapping for mapping in mappings if mapping.approved_role in {"measure_column", "metric_candidate"}
+    numeric_names = _numeric_mapping_names(mappings)
+    date_names = _date_mapping_names(mappings)
+    intermediate_lines: list[str] = []
+    for mapping in mappings:
+        if mapping.approved_name in numeric_names:
+            intermediate_lines.append(
+                f"  try_to_decimal({mapping.approved_name}, 18, 2) as {mapping.approved_name}"
+            )
+        elif mapping.approved_name in date_names:
+            intermediate_lines.append(
+                f"  try_to_date({mapping.approved_name}) as {mapping.approved_name}"
+            )
+        else:
+            intermediate_lines.append(
+                f"  nullif(trim({mapping.approved_name}), '') as {mapping.approved_name}"
+            )
+    for date_column in proposal.fact_date_columns:
+        intermediate_lines.append(
+            "  date_trunc('month', "
+            f"{date_column})::date as {_date_month_name(date_column)}"
+        )
+
+    fact_columns = _unique_names(
+        [
+            *proposal.fact_keys,
+            *proposal.fact_dimension_keys,
+            *proposal.fact_degenerate_dimensions,
+            *proposal.fact_date_columns,
+            *[_date_month_name(date_column) for date_column in proposal.fact_date_columns],
+            *proposal.fact_measures,
+        ]
     )
-    dimension = next(
-        mapping for mapping in mappings if mapping.approved_role in {"dimension", "date_time", "identifier"}
-    )
-    return {
+    fact_select_lines = [_sql_select_line(column) for column in fact_columns]
+    sql_files = {
         "models/staging/stg_uploaded.sql": (
             "select\n"
             + ",\n".join(select_lines)
             + f"\nfrom {raw_relation}"
         ),
-        "models/intermediate/int_uploaded_enriched.sql": """
-select *
-from {{ ref('stg_uploaded') }}
-""",
-        "models/dimensional/fact_uploaded_records.sql": """
-select *
-from {{ ref('int_uploaded_enriched') }}
-""",
-        "models/marts/mart_uploaded_overview.sql": f"""
-select
-  {dimension.approved_name} as grouping_value,
-  count(*) as row_count,
-  sum(try_to_decimal({measure.approved_name}, 18, 2)) as total_{measure.approved_name}
-from {{{{ ref('fact_uploaded_records') }}}}
-group by 1
-""",
+        "models/intermediate/int_uploaded_enriched.sql": (
+            "select\n"
+            + ",\n".join(intermediate_lines)
+            + "\nfrom {{ ref('stg_uploaded') }}"
+        ),
+        f"models/dimensional/{proposal.fact_table_name}.sql": (
+            "select\n"
+            + ",\n".join(fact_select_lines)
+            + "\nfrom {{ ref('int_uploaded_enriched') }}"
+        ),
     }
+    for dimension in proposal.dimensions:
+        dimension_lines = [_sql_select_line(column) for column in dimension.columns]
+        sql_files[f"models/dimensional/{dimension.name}.sql"] = (
+            "select distinct\n"
+            + ",\n".join(dimension_lines)
+            + "\nfrom {{ ref('int_uploaded_enriched') }}\n"
+            f"where {dimension.key_column} is not null"
+        )
+
+    dimension_by_column: dict[str, ValidatedModelDimension] = {}
+    for dimension in proposal.dimensions:
+        for column in dimension.columns:
+            dimension_by_column.setdefault(column, dimension)
+    fact_column_set = set(fact_columns)
+    for mart in proposal.marts:
+        joins: dict[str, tuple[str, str]] = {}
+        dimension_exprs: list[str] = []
+        for dimension_name in mart.dimensions:
+            if dimension_name in fact_column_set:
+                dimension_exprs.append(f"  f.{dimension_name} as {dimension_name}")
+                continue
+            dimension = dimension_by_column.get(dimension_name)
+            if dimension is None:
+                continue
+            alias = f"d_{dimension.name[4:]}"
+            joins[dimension.name] = (alias, dimension.key_column)
+            dimension_exprs.append(f"  {alias}.{dimension_name} as {dimension_name}")
+
+        metric_exprs = [f"  sum(f.{metric}) as {metric}" for metric in mart.metrics]
+        join_lines = [
+            f"left join {{{{ ref('{dimension_name}') }}}} {alias} "
+            f"on f.{key_column} = {alias}.{key_column}"
+            for dimension_name, (alias, key_column) in joins.items()
+        ]
+        group_by = ", ".join(str(index) for index in range(1, len(dimension_exprs) + 1))
+        sql_files[f"models/marts/{mart.name}.sql"] = (
+            "select\n"
+            + ",\n".join([*dimension_exprs, *metric_exprs])
+            + f"\nfrom {{{{ ref('{proposal.fact_table_name}') }}}} f"
+            + ("\n" + "\n".join(join_lines) if join_lines else "")
+            + f"\ngroup by {group_by}"
+        )
+
+    return sql_files
 
 
 def _generated_project(
@@ -659,6 +777,7 @@ def _generated_project(
     transformation_run: DatasetTransformationRun,
     mappings: list[SemanticMapping],
     config: Settings,
+    modeling_proposal: ValidatedModelingProposal | None = None,
 ) -> GeneratedDbtProject:
     project_name = f"meshflow_{re.sub(r'[^A-Za-z0-9_]+', '_', dataset.id).lower()}"
     profile_name = f"{project_name}_profile"
@@ -668,9 +787,21 @@ def _generated_project(
     if dataset.source_type == RAW_RETAIL_DEMO_SOURCE_TYPE:
         models = RAW_RETAIL_MODELS
         sql_files = _retail_sql(_raw_relation(dataset))
+        modeling_proposal_json = None
+        analysis_catalog = None
     else:
-        models = _generic_models(mappings)
-        sql_files = _generic_sql(dataset, mappings)
+        if modeling_proposal is None:
+            raise AppError(
+                error_code="MODELING_PROPOSAL_FAILED",
+                failed_step="modeling_proposal",
+                message="Uploaded CSV transformation requires a validated modeling proposal.",
+                next_action="Generate or retry the modeling proposal before dbt transformation.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+            )
+        models = _generic_models(modeling_proposal)
+        sql_files = _generic_sql(dataset, mappings, modeling_proposal)
+        modeling_proposal_json = proposal_to_json(modeling_proposal)
+        analysis_catalog = proposal_analysis_catalog(modeling_proposal)
 
     project_yml = _project_yml(project_name, profile_name)
     profiles_yml = _profile_yml(profile_name, config.dbt_target_name, config.dbt_threads)
@@ -686,6 +817,16 @@ def _generated_project(
     files.append(("project_yml", "project", "dbt_project.yml", project_yml, project_file))
     files.append(("profiles_yml_redacted", "project", "profiles.yml", profiles_yml, profile_file))
     files.append(("schema_yml", "project", "schema.yml", schema_yml, schema_file))
+    if modeling_proposal_json is not None:
+        files.append(
+            (
+                "modeling_proposal_json",
+                "project",
+                "modeling_proposal",
+                json.dumps(modeling_proposal_json, separators=(",", ":")),
+                None,
+            )
+        )
 
     for relative_path, content in sql_files.items():
         file_path = project_dir / relative_path
@@ -700,6 +841,8 @@ def _generated_project(
         profile_name=profile_name,
         models=models,
         artifacts=files,
+        modeling_proposal=modeling_proposal_json,
+        analysis_catalog=analysis_catalog,
     )
 
 
@@ -844,11 +987,20 @@ def transform_dataset(
 
     try:
         _ensure_snowflake_ready(config)
+        modeling_proposal = None
+        if dataset.source_type != RAW_RETAIL_DEMO_SOURCE_TYPE:
+            modeling_proposal = create_modeling_proposal(
+                db,
+                dataset,
+                mappings,
+                config=config,
+            )
         project = _generated_project(
             dataset=dataset,
             transformation_run=transformation_run,
             mappings=mappings,
             config=config,
+            modeling_proposal=modeling_proposal,
         )
         transformation_run.dbt_project_path = str(project.project_dir)
         _store_generated_artifacts(
@@ -866,18 +1018,45 @@ def transform_dataset(
         )
         transformation_run.status = "completed"
         transformation_run.completed_at = utc_now()
-        transformation_run.dbt_run_summary_json = {
+        run_summary_json = {
             "models": project.models,
             "commands": command_summary,
         }
+        if project.modeling_proposal is not None:
+            run_summary_json["modeling_proposal"] = project.modeling_proposal
+        if project.analysis_catalog is not None:
+            run_summary_json["analysis_catalog"] = project.analysis_catalog
+        transformation_run.dbt_run_summary_json = run_summary_json
         dataset.status = "ready_for_analysis"
         _clear_previous_data_flow(db, dataset)
         _store_data_flow(db=db, dataset=dataset, models=project.models)
+        try:
+            question_result = generate_dataset_question_suggestions(
+                db,
+                dataset,
+                force=True,
+                config=config,
+            )
+            run_summary_json["question_suggestions"] = {
+                "status": question_result.status,
+                "message": question_result.message,
+                "question_count": question_result.question_count,
+            }
+        except Exception as exc:
+            run_summary_json["question_suggestions"] = {
+                "status": "failed",
+                "message": (
+                    "Question suggestion generation failed after dbt success: "
+                    f"{exc.__class__.__name__}."
+                ),
+                "question_count": 0,
+            }
+        transformation_run.dbt_run_summary_json = run_summary_json
         _store_run_result_artifact(
             db=db,
             dataset=dataset,
             transformation_run=transformation_run,
-            summary=transformation_run.dbt_run_summary_json,
+            summary=run_summary_json,
         )
         db.commit()
         db.refresh(dataset)
@@ -1045,7 +1224,15 @@ def cleanup_dataset_model_tables(
     if not model_names:
         return CleanupOperationResult(status="skipped")
 
-    unexpected = sorted(model_names - KNOWN_DBT_MODEL_TABLES)
+    unexpected = sorted(
+        model_name
+        for model_name in model_names
+        if model_name not in KNOWN_DBT_MODEL_TABLES
+        and not (
+            SAFE_NAME_RE.fullmatch(model_name)
+            and model_name.startswith(GENERATED_MODEL_PREFIXES)
+        )
+    )
     unsafe = sorted(model_name for model_name in model_names if not SAFE_NAME_RE.fullmatch(model_name))
     if unexpected or unsafe:
         return CleanupOperationResult(

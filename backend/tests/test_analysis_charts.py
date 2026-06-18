@@ -67,7 +67,7 @@ def create_ready_dataset(
 
 
 def candidates() -> list[ProviderCandidate]:
-    return [ProviderCandidate("openai_primary", "openai", "key", "model")]
+    return [ProviderCandidate("openai_fallback", "openai", "key", "model")]
 
 
 def plan_payload(

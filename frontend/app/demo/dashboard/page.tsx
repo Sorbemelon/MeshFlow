@@ -404,7 +404,7 @@ export default function DashboardPage() {
                 <p className="mt-1.5 rounded-md bg-surface-muted px-3 py-2.5 text-xs text-ink-muted">
                   {hasSchemaReviewDatasets
                     ? "No prepared questions are available for this ready dataset yet. You can still ask a direct question."
-                    : "Suggestions appear after a dataset is loaded and semantic preparation succeeds."}
+                    : "Suggestions appear after a dataset is transformed into Data Marts."}
                 </p>
               )
             ) : null}

@@ -81,10 +81,8 @@ class Settings(BaseSettings):
     openai_model: str | None = Field(default=None, alias="OPENAI_MODEL")
     gemini_api_key_1: str | None = Field(default=None, alias="GEMINI_API_KEY_1")
     gemini_api_key_2: str | None = Field(default=None, alias="GEMINI_API_KEY_2")
-    gemini_api_key_3: str | None = Field(default=None, alias="GEMINI_API_KEY_3")
     gemini_model_1: str | None = Field(default=None, alias="GEMINI_MODEL_1")
     gemini_model_2: str | None = Field(default=None, alias="GEMINI_MODEL_2")
-    gemini_model_3: str | None = Field(default=None, alias="GEMINI_MODEL_3")
 
     @property
     def cors_origins(self) -> list[str]:

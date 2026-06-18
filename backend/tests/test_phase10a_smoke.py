@@ -25,10 +25,8 @@ def _force_missing_external_config(monkeypatch) -> None:
         "openai_model",
         "gemini_api_key_1",
         "gemini_api_key_2",
-        "gemini_api_key_3",
         "gemini_model_1",
         "gemini_model_2",
-        "gemini_model_3",
     ):
         monkeypatch.setattr(settings, name, None)
     monkeypatch.setattr(settings, "allow_demo_reset_usage", False)

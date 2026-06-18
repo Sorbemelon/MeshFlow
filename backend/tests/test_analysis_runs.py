@@ -35,10 +35,10 @@ def create_session(client: TestClient) -> str:
 
 def configured_candidates() -> list[ProviderCandidate]:
     return [
-        ProviderCandidate("openai_primary", "openai", "openai-key", "openai-model"),
-        ProviderCandidate("gemini_lane_1", "gemini", "key-1", "gemini-model-1"),
-        ProviderCandidate("gemini_lane_2", "gemini", "key-2", "gemini-model-2"),
-        ProviderCandidate("gemini_lane_3", "gemini", "key-3", "gemini-model-3"),
+        ProviderCandidate("gemini_model_1_key_1", "gemini", "key-1", "gemini-model-1"),
+        ProviderCandidate("gemini_model_1_key_2", "gemini", "key-2", "gemini-model-1"),
+        ProviderCandidate("openai_fallback", "openai", "openai-key", "openai-model"),
+        ProviderCandidate("gemini_model_2_key_1", "gemini", "key-1", "gemini-model-2"),
     ]
 
 
@@ -143,13 +143,13 @@ def patch_successful_analysis(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "app.services.analysis_run_service.call_openai_provider",
-        lambda candidate, prompt, temperature: plan_payload(),
+        lambda candidate, prompt, temperature: (_ for _ in ()).throw(
+            AssertionError("OpenAI should not be called when Gemini model 1 succeeds")
+        ),
     )
     monkeypatch.setattr(
         "app.services.analysis_run_service.call_gemini_provider",
-        lambda candidate, prompt, temperature: (_ for _ in ()).throw(
-            AssertionError("Gemini should not be called when OpenAI succeeds")
-        ),
+        lambda candidate, prompt, temperature: plan_payload(),
     )
     monkeypatch.setattr(
         "app.services.analysis_run_service.snowflake_service.execute_analysis_query",
@@ -232,10 +232,10 @@ def test_provider_unavailable_returns_honest_failure_without_usage(
     monkeypatch.setattr(
         "app.services.analysis_run_service.provider_candidates",
         lambda _config: [
-            ProviderCandidate("openai_primary", "openai", None, None),
-            ProviderCandidate("gemini_lane_1", "gemini", None, None),
-            ProviderCandidate("gemini_lane_2", "gemini", None, None),
-            ProviderCandidate("gemini_lane_3", "gemini", None, None),
+            ProviderCandidate("gemini_model_1_key_1", "gemini", None, None),
+            ProviderCandidate("gemini_model_1_key_2", "gemini", None, None),
+            ProviderCandidate("openai_fallback", "openai", None, None),
+            ProviderCandidate("gemini_model_2_key_1", "gemini", None, None),
         ],
     )
     session_id = create_session(client)
@@ -252,7 +252,7 @@ def test_provider_unavailable_returns_honest_failure_without_usage(
     assert db_session.get(DemoSession, session_id).successful_analysis_runs_used == 0
 
 
-def test_invalid_provider_output_falls_back_to_gemini(
+def test_invalid_provider_output_tries_next_gemini_key(
     client: TestClient,
     db_session: Session,
     monkeypatch,
@@ -261,14 +261,12 @@ def test_invalid_provider_output_falls_back_to_gemini(
         "app.services.analysis_run_service.provider_candidates",
         lambda _config: configured_candidates(),
     )
-    monkeypatch.setattr(
-        "app.services.analysis_run_service.call_openai_provider",
-        lambda candidate, prompt, temperature: "not-json",
-    )
-    monkeypatch.setattr(
-        "app.services.analysis_run_service.call_gemini_provider",
-        lambda candidate, prompt, temperature: plan_payload(),
-    )
+    def gemini(candidate, prompt, temperature):
+        if candidate.lane_name == "gemini_model_1_key_1":
+            return "not-json"
+        return plan_payload()
+
+    monkeypatch.setattr("app.services.analysis_run_service.call_gemini_provider", gemini)
     monkeypatch.setattr(
         "app.services.analysis_run_service.snowflake_service.execute_analysis_query",
         lambda **_kwargs: query_result(),
@@ -281,14 +279,14 @@ def test_invalid_provider_output_falls_back_to_gemini(
     assert response.status_code == 200
     provider_runs = response.json()["analysis_run"]["provider_runs"]
     assert [run["provider_name"] for run in provider_runs] == [
-        "openai_primary",
-        "gemini_lane_1",
+        "gemini_model_1_key_1",
+        "gemini_model_1_key_2",
     ]
     assert provider_runs[0]["error_code"] == "ANALYSIS_PLAN_INVALID"
     assert provider_runs[1]["status"] == "completed"
 
 
-def test_openai_success_generates_query_and_skips_gemini(
+def test_gemini_model_one_success_generates_query_and_skips_fallbacks(
     client: TestClient,
     db_session: Session,
     monkeypatch,
@@ -303,7 +301,7 @@ def test_openai_success_generates_query_and_skips_gemini(
     body = response.json()
     analysis_run = body["analysis_run"]
     assert analysis_run["status"] == "completed"
-    assert analysis_run["provider_runs"][0]["provider_name"] == "openai_primary"
+    assert analysis_run["provider_runs"][0]["provider_name"] == "gemini_model_1_key_1"
     assert analysis_run["generated_sql"].startswith("SELECT")
     assert "MART_SALES_PERFORMANCE" in analysis_run["generated_sql"]
     assert analysis_run["preview_rows"] == [{"ORDER_MONTH": "2026-01", "REVENUE": "1250.50"}]

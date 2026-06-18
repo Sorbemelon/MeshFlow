@@ -62,15 +62,15 @@ def create_ready_dataset(
 
 
 def analysis_candidates() -> list[ProviderCandidate]:
-    return [ProviderCandidate("openai_primary", "openai", "openai-key", "openai-model")]
+    return [ProviderCandidate("openai_fallback", "openai", "openai-key", "openai-model")]
 
 
 def insight_candidates() -> list[ProviderCandidate]:
     return [
-        ProviderCandidate("gemini_lane_1", "gemini", "key-1", "gemini-model-1"),
-        ProviderCandidate("gemini_lane_2", "gemini", "key-2", "gemini-model-2"),
-        ProviderCandidate("gemini_lane_3", "gemini", "key-3", "gemini-model-3"),
+        ProviderCandidate("gemini_model_1_key_1", "gemini", "key-1", "gemini-model-1"),
+        ProviderCandidate("gemini_model_1_key_2", "gemini", "key-2", "gemini-model-1"),
         ProviderCandidate("openai_fallback", "openai", "openai-key", "openai-model"),
+        ProviderCandidate("gemini_model_2_key_1", "gemini", "key-1", "gemini-model-2"),
     ]
 
 
@@ -216,7 +216,7 @@ def test_gemini_lane_one_success_skips_fallback(
         for run in db_session.scalars(select(AiProviderRun)).all()
         if run.task_type == "insight_generation"
     ]
-    assert [run.provider_name for run in provider_runs] == ["gemini_lane_1"]
+    assert [run.provider_name for run in provider_runs] == ["gemini_model_1_key_1"]
     assert provider_runs[0].status == "completed"
 
 
@@ -232,8 +232,8 @@ def test_gemini_lane_failure_uses_next_gemini_lane(
     )
 
     def gemini(candidate, prompt, temperature):
-        if candidate.lane_name == "gemini_lane_1":
-            raise ProviderCallError("AI_PROVIDER_REQUEST_FAILED", "lane one failed")
+        if candidate.lane_name == "gemini_model_1_key_1":
+            raise ProviderCallError("AI_PROVIDER_REQUEST_FAILED", "key one failed")
         return insight_payload()
 
     monkeypatch.setattr("app.services.insight_generation_service.call_gemini_provider", gemini)
@@ -254,7 +254,10 @@ def test_gemini_lane_failure_uses_next_gemini_lane(
         for run in db_session.scalars(select(AiProviderRun)).all()
         if run.task_type == "insight_generation"
     ]
-    assert [run.provider_name for run in provider_runs] == ["gemini_lane_1", "gemini_lane_2"]
+    assert [run.provider_name for run in provider_runs] == [
+        "gemini_model_1_key_1",
+        "gemini_model_1_key_2",
+    ]
     assert provider_runs[0].status == "failed"
     assert provider_runs[1].status == "completed"
 
@@ -306,7 +309,7 @@ def test_invalid_insight_output_triggers_fallback(
     )
 
     def gemini(candidate, prompt, temperature):
-        if candidate.lane_name == "gemini_lane_1":
+        if candidate.lane_name == "gemini_model_1_key_1":
             return "not-json"
         return insight_payload()
 

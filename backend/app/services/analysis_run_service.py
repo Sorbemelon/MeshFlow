@@ -41,6 +41,8 @@ from app.services.semantic_preparation_service import (
     ProviderCandidate,
     call_gemini_provider,
     call_openai_provider,
+    gemini_key_candidates,
+    openai_candidate,
 )
 
 
@@ -113,10 +115,9 @@ def normalize_question(question: str) -> str:
 
 def provider_candidates(config: Settings = settings) -> list[ProviderCandidate]:
     return [
-        ProviderCandidate("openai_primary", "openai", config.openai_api_key, config.openai_model),
-        ProviderCandidate("gemini_lane_1", "gemini", config.gemini_api_key_1, config.gemini_model_1),
-        ProviderCandidate("gemini_lane_2", "gemini", config.gemini_api_key_2, config.gemini_model_2),
-        ProviderCandidate("gemini_lane_3", "gemini", config.gemini_api_key_3, config.gemini_model_3),
+        *gemini_key_candidates("gemini_model_1", config.gemini_model_1, config),
+        openai_candidate("openai_fallback", config),
+        *gemini_key_candidates("gemini_model_2", config.gemini_model_2, config),
     ]
 
 
@@ -356,6 +357,23 @@ def _generic_catalog_from_transformation(dataset: Dataset) -> dict[str, dict[str
     latest_run = _latest_completed_transformation(dataset)
     if not latest_run or not latest_run.dbt_run_summary_json:
         return {}
+    generated_catalog = latest_run.dbt_run_summary_json.get("analysis_catalog")
+    if isinstance(generated_catalog, dict):
+        catalog: dict[str, dict[str, object]] = {}
+        for model_name, model_info in generated_catalog.items():
+            if not isinstance(model_name, str) or not isinstance(model_info, dict):
+                continue
+            dimensions = model_info.get("dimensions", [])
+            metrics = model_info.get("metrics", [])
+            grain = model_info.get("grain", "uploaded dataset Data Mart")
+            if isinstance(dimensions, list) and isinstance(metrics, list):
+                catalog[model_name] = {
+                    "grain": str(grain),
+                    "dimensions": [str(value) for value in dimensions],
+                    "metrics": [str(value) for value in metrics],
+                }
+        if catalog:
+            return catalog
     models = latest_run.dbt_run_summary_json.get("models")
     if not isinstance(models, dict):
         return {}
@@ -434,6 +452,14 @@ def build_analysis_prompt(
     question: str,
     catalog: dict[str, dict[str, object]],
 ) -> str:
+    mart_summaries = {
+        model_name: {
+            "grain": info.get("grain"),
+            "dimensions": info.get("dimensions", []),
+            "metrics": info.get("metrics", []),
+        }
+        for model_name, info in catalog.items()
+    }
     context = {
         "user_question": question,
         "dataset": {
@@ -442,13 +468,24 @@ def build_analysis_prompt(
             "source_type": dataset.source_type,
             "status": dataset.status,
         },
-        "available_marts": catalog,
+        "available_marts": mart_summaries,
         "suggested_questions": _question_suggestions(dataset),
+        "planning_priorities": [
+            "Choose the single Data Mart that best answers the user's question.",
+            "Prefer the narrowest mart whose grain and fields match the question.",
+            "For trend questions, prefer time/month dimensions.",
+            "For breakdown or ranking questions, prefer categorical dimensions and sort metric descending.",
+            "For KPI questions, omit dimensions and aggregate one or more metrics.",
+            "If the question is unsupported by the available marts, return needs_user_confirmation.",
+        ],
         "hard_limits": [
             "Return JSON only.",
             "Do not generate SQL. The backend generates SQL.",
             "Use only available_marts, dimensions, and metrics from context.",
             "Do not claim charts, insights, or dashboard cards are ready.",
+            "Do not use fields from a different mart than source_model.",
+            "Do not include filters unless the user explicitly asked for a specific dimension value.",
+            "Use sort only on selected dimensions or metrics exposed by the chosen mart.",
             f"Limit must be between 1 and {MAX_LIMIT}.",
         ],
     }
@@ -472,6 +509,9 @@ def build_analysis_prompt(
         "Do not provide SQL. The backend will generate SQL from your validated plan.\n"
         "Choose exactly one source_model from the available marts.\n"
         "Use only metrics and dimensions listed for that source_model.\n"
+        "Match source_model, metrics, dimensions, filters, and sort to the user's wording.\n"
+        "When the question asks 'how is X performing', prefer a trend if a time dimension exists; "
+        "otherwise choose the strongest breakdown dimension.\n"
         "Use low-risk aggregations: sum, avg, count, min, max.\n"
         "Do not invent columns, marts, insights, ChartSpecs, or dashboard cards.\n"
         f"Output schema: {json.dumps(schema, separators=(',', ':'))}\n"

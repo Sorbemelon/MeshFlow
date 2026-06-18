@@ -38,7 +38,6 @@ def isolate_live_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "openai_api_key": None,
         "gemini_api_key_1": None,
         "gemini_api_key_2": None,
-        "gemini_api_key_3": None,
     }
     for field_name, value in safe_overrides.items():
         monkeypatch.setattr(settings, field_name, value)

@@ -131,7 +131,7 @@ def create_analysis_with_chart(
                     key_findings_json=["The preview contains one revenue point."],
                     tags_json=["revenue"],
                     confidence="medium",
-                    provider_name="gemini_lane_1",
+                    provider_name="gemini_model_1_key_1",
                     provider_model="gemini-model",
                 )
             )
@@ -310,7 +310,7 @@ def test_dashboard_card_quota_blocks_ninth_card(
 
 
 def analysis_candidates() -> list[ProviderCandidate]:
-    return [ProviderCandidate("openai_primary", "openai", "openai-key", "openai-model")]
+    return [ProviderCandidate("openai_fallback", "openai", "openai-key", "openai-model")]
 
 
 def plan_payload() -> str:

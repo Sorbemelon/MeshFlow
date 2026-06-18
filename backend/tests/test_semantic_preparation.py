@@ -146,10 +146,10 @@ def semantic_payload(
 
 def configured_candidates() -> list[ProviderCandidate]:
     return [
-        ProviderCandidate("gemini_lane_1", "gemini", "key-1", "gemini-model-1"),
-        ProviderCandidate("gemini_lane_2", "gemini", "key-2", "gemini-model-2"),
-        ProviderCandidate("gemini_lane_3", "gemini", "key-3", "gemini-model-3"),
+        ProviderCandidate("gemini_model_1_key_1", "gemini", "key-1", "gemini-model-1"),
+        ProviderCandidate("gemini_model_1_key_2", "gemini", "key-2", "gemini-model-1"),
         ProviderCandidate("openai_fallback", "openai", "openai-key", "openai-model"),
+        ProviderCandidate("gemini_model_2_key_1", "gemini", "key-1", "gemini-model-2"),
     ]
 
 
@@ -211,10 +211,10 @@ def test_semantic_prep_no_providers_configured_returns_honest_failed_status(
     monkeypatch.setattr(
         "app.services.semantic_preparation_service.provider_candidates",
         lambda _config: [
-            ProviderCandidate("gemini_lane_1", "gemini", None, None),
-            ProviderCandidate("gemini_lane_2", "gemini", None, None),
-            ProviderCandidate("gemini_lane_3", "gemini", None, None),
+            ProviderCandidate("gemini_model_1_key_1", "gemini", None, None),
+            ProviderCandidate("gemini_model_1_key_2", "gemini", None, None),
             ProviderCandidate("openai_fallback", "openai", None, None),
+            ProviderCandidate("gemini_model_2_key_1", "gemini", None, None),
         ],
     )
     session_id = create_session(client)
@@ -264,16 +264,16 @@ def test_semantic_prep_mocked_gemini_success_stores_suggestions(
     )
     assert revenue_column["semantic_role"] == "measure_column"
     assert revenue_column["provider_name"] == "gemini"
-    assert body["suggested_questions"][0]["question"] == "How is revenue trending over time?"
+    assert body["suggested_questions"] == []
 
     db_session.expire_all()
     assert len(db_session.scalars(select(SemanticColumn)).all()) == 3
-    assert len(db_session.scalars(select(DatasetQuestionSuggestion)).all()) == 1
+    assert db_session.scalars(select(DatasetQuestionSuggestion)).all() == []
     runs = db_session.scalars(select(AiProviderRun)).all()
     assert [run.status for run in runs] == ["completed"]
 
 
-def test_semantic_prep_tries_gemini_lane_two_after_lane_one_failure(
+def test_semantic_prep_tries_next_gemini_key_before_fallback_model(
     client: TestClient,
     db_session: Session,
     monkeypatch,
@@ -284,8 +284,8 @@ def test_semantic_prep_tries_gemini_lane_two_after_lane_one_failure(
     )
 
     def call_gemini(candidate, prompt, temperature):
-        if candidate.lane_name == "gemini_lane_1":
-            raise ProviderCallError("AI_PROVIDER_REQUEST_FAILED", "lane 1 failed")
+        if candidate.lane_name == "gemini_model_1_key_1":
+            raise ProviderCallError("AI_PROVIDER_REQUEST_FAILED", "key 1 failed")
         return semantic_payload(question="Which customer segments drive revenue?")
 
     monkeypatch.setattr("app.services.semantic_preparation_service.call_gemini_provider", call_gemini)
@@ -298,11 +298,11 @@ def test_semantic_prep_tries_gemini_lane_two_after_lane_one_failure(
     body = response.json()
     assert body["status"] == "completed"
     assert [run["provider_name"] for run in body["provider_runs"]] == [
-        "gemini_lane_1",
-        "gemini_lane_2",
+        "gemini_model_1_key_1",
+        "gemini_model_1_key_2",
     ]
-    assert body["provider_runs"][1]["fallback_from_provider"] == "gemini_lane_1"
-    assert body["suggested_questions"][0]["intent"] == "revenue_trend"
+    assert body["provider_runs"][1]["fallback_from_provider"] == "gemini_model_1_key_1"
+    assert body["suggested_questions"] == []
 
 
 def test_semantic_prep_uses_openai_fallback_after_gemini_failures(
@@ -347,7 +347,7 @@ def test_invalid_provider_output_triggers_fallback(
     )
 
     def call_gemini(candidate, prompt, temperature):
-        if candidate.lane_name == "gemini_lane_1":
+        if candidate.lane_name == "gemini_model_1_key_1":
             return "not-json"
         return semantic_payload()
 
@@ -562,4 +562,4 @@ def test_dataset_detail_exposes_semantic_status_and_suggestions(
     body = response.json()
     assert body["semantic_preparation"]["status"] == "completed"
     assert len(body["semantic_preparation"]["semantic_columns"]) == 3
-    assert body["semantic_preparation"]["suggested_questions"][0]["intent"] == "revenue_trend"
+    assert body["semantic_preparation"]["suggested_questions"] == []

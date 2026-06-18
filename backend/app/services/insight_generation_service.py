@@ -15,6 +15,8 @@ from app.services.semantic_preparation_service import (
     ProviderCandidate,
     call_gemini_provider,
     call_openai_provider,
+    gemini_key_candidates,
+    openai_candidate,
 )
 
 
@@ -62,10 +64,9 @@ class InsightGenerationResult:
 
 def provider_candidates(config: Settings = settings) -> list[ProviderCandidate]:
     return [
-        ProviderCandidate("gemini_lane_1", "gemini", config.gemini_api_key_1, config.gemini_model_1),
-        ProviderCandidate("gemini_lane_2", "gemini", config.gemini_api_key_2, config.gemini_model_2),
-        ProviderCandidate("gemini_lane_3", "gemini", config.gemini_api_key_3, config.gemini_model_3),
-        ProviderCandidate("openai_fallback", "openai", config.openai_api_key, config.openai_model),
+        *gemini_key_candidates("gemini_model_1", config.gemini_model_1, config),
+        openai_candidate("openai_fallback", config),
+        *gemini_key_candidates("gemini_model_2", config.gemini_model_2, config),
     ]
 
 
@@ -224,6 +225,7 @@ def _chart_context(chart: AnalysisRunChart) -> dict[str, object]:
 
 
 def build_insight_prompt(analysis_run: AnalysisRun) -> str:
+    preview_rows = (analysis_run.preview_rows_json or [])[:100]
     context = {
         "question": analysis_run.question,
         "dataset": {
@@ -239,23 +241,33 @@ def build_insight_prompt(analysis_run: AnalysisRun) -> str:
             "dimensions": analysis_run.dimensions_json or [],
             "generated_sql": analysis_run.generated_sql,
             "output_schema": analysis_run.output_schema_json or [],
-            "preview_rows": (analysis_run.preview_rows_json or [])[:100],
+            "preview_rows": preview_rows,
             "row_count": analysis_run.row_count,
         },
         "charts": [_chart_context(chart) for chart in analysis_run.charts],
+        "insight_priorities": [
+            "Summarize what the previewed result directly shows.",
+            "Name the metric and dimension driving each finding.",
+            "Call out trends, rankings, unusually high or low values, or concentration only when visible in rows/charts.",
+            "Use medium confidence unless the preview rows are comprehensive and the pattern is obvious.",
+            "Use low confidence when the result has few rows or limited context.",
+            "Keep recommendations cautious and tied to observed results.",
+        ],
         "known_limits": [
             "Use only the stored preview rows and chart snapshots.",
             "Do not claim facts beyond the previewed result.",
             "Do not claim causation unless the result directly supports it.",
-            "Do not mention dashboard card persistence; it is not implemented yet.",
+            "Do not claim analysis covers the full dataset unless row_count and preview rows prove that.",
+            "Do not mention backend internals, SQL execution details, provider routing, or dashboard persistence.",
+            f"Preview rows supplied: {len(preview_rows)}.",
         ],
     }
     schema = {
         "question_insight": {
             "summary": "short evidence-backed summary",
             "key_findings": ["concise finding grounded in preview rows"],
-            "tags": sorted(ALLOWED_TAGS),
-            "confidence": ["low", "medium", "high"],
+            "tags": ["one_or_more_allowed_tag_strings"],
+            "confidence": "exactly one of: low, medium, high",
         },
         "chart_insights": [
             {
@@ -263,8 +275,8 @@ def build_insight_prompt(analysis_run: AnalysisRun) -> str:
                 "chart_title": "existing chart title from context",
                 "summary": "short chart-level summary",
                 "key_findings": ["concise finding grounded in chart data"],
-                "tags": sorted(ALLOWED_TAGS),
-                "confidence": ["low", "medium", "high"],
+                "tags": ["one_or_more_allowed_tag_strings"],
+                "confidence": "exactly one of: low, medium, high",
             }
         ],
         "warnings": [],
@@ -275,7 +287,11 @@ def build_insight_prompt(analysis_run: AnalysisRun) -> str:
         "Use only the supplied output schema, preview rows, and chart snapshots.\n"
         "Do not invent rows, metrics, charts, dashboard cards, or external facts.\n"
         "Do not claim the preview represents the entire dataset unless the context says so.\n"
-        "Keep findings concise and evidence-backed.\n"
+        "Keep findings concise, evidence-backed, and useful to a business user.\n"
+        "Every key finding must be traceable to a metric, dimension, row, or chart in context.\n"
+        "Prefer neutral language over certainty when the preview is small.\n"
+        "For confidence, return exactly one string: low, medium, or high. Do not return an array.\n"
+        "For tags, return an array containing only allowed tag strings.\n"
         f"Allowed tags: {', '.join(sorted(ALLOWED_TAGS))}.\n"
         f"Output schema: {json.dumps(schema, separators=(',', ':'))}\n"
         f"Context: {json.dumps(context, default=str, separators=(',', ':'))}"
