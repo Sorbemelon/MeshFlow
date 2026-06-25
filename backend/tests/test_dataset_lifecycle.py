@@ -532,7 +532,6 @@ def test_missing_external_config_is_reported_as_skipped_not_fake_success(
         Settings(
             _env_file=None,
             AWS_REGION=None,
-            AWS_S3_BUCKET=None,
             S3_BUCKET_NAME=None,
             AWS_ACCESS_KEY_ID=None,
             AWS_SECRET_ACCESS_KEY=None,

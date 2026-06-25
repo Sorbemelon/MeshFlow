@@ -13,7 +13,7 @@ def check_s3_readiness(config: Settings = settings) -> ReadinessCheck:
             "AWS_REGION": config.aws_region,
             "AWS_ACCESS_KEY_ID": config.aws_access_key_id,
             "AWS_SECRET_ACCESS_KEY": config.aws_secret_access_key,
-            "S3_BUCKET_NAME": config.configured_s3_bucket,
+            "S3_BUCKET_NAME": config.s3_bucket_name,
         }
     )
     if missing:
@@ -40,7 +40,7 @@ def check_s3_readiness(config: Settings = settings) -> ReadinessCheck:
             aws_access_key_id=config.aws_access_key_id,
             aws_secret_access_key=config.aws_secret_access_key,
         )
-        client.head_bucket(Bucket=config.configured_s3_bucket)
+        client.head_bucket(Bucket=config.s3_bucket_name)
     except (BotoCoreError, ClientError):
         return ReadinessCheck(
             status="failed",

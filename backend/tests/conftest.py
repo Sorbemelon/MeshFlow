@@ -23,7 +23,6 @@ def isolate_live_settings(monkeypatch: pytest.MonkeyPatch) -> None:
         "app_env": "test",
         "allow_demo_reset_usage": False,
         "aws_region": None,
-        "aws_s3_bucket": None,
         "s3_bucket_name": None,
         "aws_access_key_id": None,
         "aws_secret_access_key": None,

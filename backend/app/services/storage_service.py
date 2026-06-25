@@ -63,7 +63,7 @@ def upload_csv_to_s3(
     storage_group: str = "raw",
     config: Settings = settings,
 ) -> StorageUploadResult:
-    bucket = config.configured_s3_bucket
+    bucket = config.s3_bucket_name
     if not bucket:
         raise StorageServiceError("S3 bucket is not configured.")
 
@@ -101,7 +101,7 @@ def delete_s3_object(
     storage_key: str,
     config: Settings = settings,
 ) -> None:
-    bucket = config.configured_s3_bucket
+    bucket = config.s3_bucket_name
     if not bucket:
         return
 
@@ -132,7 +132,7 @@ def delete_s3_object_for_cleanup(
     if not storage_key:
         return CleanupOperationResult(status="skipped")
 
-    bucket = config.configured_s3_bucket
+    bucket = config.s3_bucket_name
     if not bucket:
         return CleanupOperationResult(
             status="not_configured",

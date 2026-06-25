@@ -56,7 +56,6 @@ class Settings(BaseSettings):
 
     # Future phases only.
     aws_region: str | None = Field(default=None, alias="AWS_REGION")
-    aws_s3_bucket: str | None = Field(default=None, alias="AWS_S3_BUCKET")
     s3_bucket_name: str | None = Field(default=None, alias="S3_BUCKET_NAME")
     s3_upload_prefix: str = Field(default="meshflow-demo", alias="S3_UPLOAD_PREFIX")
     aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
@@ -91,10 +90,6 @@ class Settings(BaseSettings):
             for origin in self.backend_cors_origins.split(",")
             if origin.strip()
         ]
-
-    @property
-    def configured_s3_bucket(self) -> str | None:
-        return self.s3_bucket_name or self.aws_s3_bucket
 
 
 @lru_cache(maxsize=1)

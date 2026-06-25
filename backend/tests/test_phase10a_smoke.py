@@ -9,7 +9,6 @@ from app.services.demo_session_service import DEMO_SESSION_HEADER
 def _force_missing_external_config(monkeypatch) -> None:
     for name in (
         "aws_region",
-        "aws_s3_bucket",
         "s3_bucket_name",
         "aws_access_key_id",
         "aws_secret_access_key",
