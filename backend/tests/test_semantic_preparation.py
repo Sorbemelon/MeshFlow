@@ -226,7 +226,7 @@ def test_semantic_prep_no_providers_configured_returns_honest_failed_status(
     body = response.json()
     assert body["status"] == "failed"
     assert body["semantic_columns"] == []
-    assert body["suggested_questions"] == []
+    assert "suggested_questions" not in body
     assert {run["error_code"] for run in body["provider_runs"]} == {
         "AI_PROVIDER_NOT_CONFIGURED"
     }
@@ -264,7 +264,7 @@ def test_semantic_prep_mocked_gemini_success_stores_suggestions(
     )
     assert revenue_column["semantic_role"] == "measure_column"
     assert revenue_column["provider_name"] == "gemini"
-    assert body["suggested_questions"] == []
+    assert "suggested_questions" not in body
 
     db_session.expire_all()
     assert len(db_session.scalars(select(SemanticColumn)).all()) == 3
@@ -302,7 +302,7 @@ def test_semantic_prep_tries_next_gemini_key_before_fallback_model(
         "gemini_model_1_key_2",
     ]
     assert body["provider_runs"][1]["fallback_from_provider"] == "gemini_model_1_key_1"
-    assert body["suggested_questions"] == []
+    assert "suggested_questions" not in body
 
 
 def test_semantic_prep_uses_openai_fallback_after_gemini_failures(
@@ -562,4 +562,6 @@ def test_dataset_detail_exposes_semantic_status_and_suggestions(
     body = response.json()
     assert body["semantic_preparation"]["status"] == "completed"
     assert len(body["semantic_preparation"]["semantic_columns"]) == 3
-    assert body["semantic_preparation"]["suggested_questions"] == []
+    assert "suggested_questions" not in body["semantic_preparation"]
+    assert body["question_suggestions"]["status"] == "not_started"
+    assert body["question_suggestions"]["suggestions"] == []

@@ -19,11 +19,9 @@ from app.models.dataset import (
     AiProviderRun,
     ColumnProfile,
     Dataset,
-    DatasetQuestionSuggestion,
     SemanticColumn,
 )
 from app.schemas.dataset import (
-    DatasetQuestionSuggestionSummary,
     ProviderRunSummary,
     SemanticColumnMappingPatchRequest,
     SemanticColumnSummary,
@@ -121,17 +119,6 @@ def _semantic_column_summary(column: SemanticColumn) -> SemanticColumnSummary:
     )
 
 
-def _question_summary(question: DatasetQuestionSuggestion) -> DatasetQuestionSuggestionSummary:
-    return DatasetQuestionSuggestionSummary(
-        id=question.id,
-        question=question.question,
-        intent=question.intent,
-        sort_order=question.sort_order,
-        provider_name=question.provider_name,
-        provider_model=question.provider_model,
-    )
-
-
 def _provider_run_summary(run: AiProviderRun) -> ProviderRunSummary:
     return ProviderRunSummary(
         id=run.id,
@@ -154,7 +141,6 @@ def semantic_preparation_summary_from_dataset(
 ) -> SemanticPreparationResponse:
     task_runs = [run for run in dataset.provider_runs if run.task_type == TASK_TYPE]
     semantic_columns = list(dataset.semantic_columns)
-    questions = list(dataset.question_suggestions)
 
     latest_run = task_runs[-1] if task_runs else None
     if prefer_latest_failure and latest_run and latest_run.status in {"failed", "unavailable"}:
@@ -185,7 +171,6 @@ def semantic_preparation_summary_from_dataset(
         status=response_status,
         message=message,
         semantic_columns=[_semantic_column_summary(column) for column in semantic_columns],
-        suggested_questions=[_question_summary(question) for question in questions],
         provider_runs=[_provider_run_summary(run) for run in task_runs],
         next_action=next_action,
     )
@@ -206,7 +191,6 @@ def _load_dataset_for_session(
         .options(
             selectinload(Dataset.column_profiles),
             selectinload(Dataset.semantic_columns),
-            selectinload(Dataset.question_suggestions),
             selectinload(Dataset.provider_runs),
         )
     )

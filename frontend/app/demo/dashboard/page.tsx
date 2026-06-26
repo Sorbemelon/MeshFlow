@@ -216,7 +216,7 @@ export default function DashboardPage() {
         if (cancelled) {
           return;
         }
-        setSuggestedQuestions(detail.semantic_preparation.suggested_questions);
+        setSuggestedQuestions(detail.question_suggestions.suggestions);
         setQuestionState("ready");
       } catch (caught) {
         if (cancelled) {

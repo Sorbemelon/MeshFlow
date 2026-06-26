@@ -375,7 +375,15 @@ export type SemanticPreparationResponse = {
   status: SemanticPreparationStatus;
   message: string;
   semantic_columns: SemanticColumnSummary[];
-  suggested_questions: DatasetQuestionSuggestionSummary[];
+  provider_runs: ProviderRunSummary[];
+  next_action: string | null;
+};
+
+export type QuestionSuggestionsResponse = {
+  status: "not_started" | "completed" | "failed";
+  message: string;
+  suggestions: DatasetQuestionSuggestionSummary[];
+  generated_from: "data_marts";
   provider_runs: ProviderRunSummary[];
   next_action: string | null;
 };
@@ -385,6 +393,7 @@ export type DatasetDetailResponse = {
   file: DatasetFileSummary | null;
   schema_preview: SchemaPreview;
   semantic_preparation: SemanticPreparationResponse;
+  question_suggestions: QuestionSuggestionsResponse;
 };
 
 export type TransformationStatus =
@@ -448,6 +457,7 @@ export type DatasetDataFlowResponse = {
   edges: DataFlowEdgeSummary[];
   artifacts: DbtArtifactSummary[];
   models: Record<string, string[]>;
+  question_suggestions: QuestionSuggestionsResponse;
 };
 
 export type DatasetTransformResponse = {

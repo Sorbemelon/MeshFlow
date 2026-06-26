@@ -45,6 +45,9 @@ from app.services.modeling_proposal_service import (
     proposal_to_json,
 )
 from app.services.question_suggestion_service import generate_dataset_question_suggestions
+from app.services.question_suggestion_summary_service import (
+    question_suggestions_summary_from_dataset,
+)
 
 
 SAFE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -1176,6 +1179,7 @@ def get_dataset_data_flow(
         edges=edges,
         artifacts=[_artifact_summary(artifact) for artifact in latest_run_artifacts],
         models=_models_from_run(latest_run),
+        question_suggestions=question_suggestions_summary_from_dataset(dataset),
     )
 
 

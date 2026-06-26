@@ -35,6 +35,9 @@ from app.services.demo_session_service import (
     configured_limits,
     get_required_session,
 )
+from app.services.question_suggestion_summary_service import (
+    question_suggestions_summary_from_dataset,
+)
 from app.services.upload_preflight_service import (
     CsvUploadValidation,
     validate_csv_content,
@@ -519,6 +522,7 @@ def get_dataset_detail(
         file=dataset_file_summary(dataset_file) if dataset_file else None,
         schema_preview=schema_preview_from_profiles(dataset.column_profiles),
         semantic_preparation=semantic_preparation_summary_from_dataset(dataset),
+        question_suggestions=question_suggestions_summary_from_dataset(dataset),
     )
 
 

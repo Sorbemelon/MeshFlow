@@ -31,6 +31,7 @@ SemanticRole = Literal[
     "unknown",
 ]
 SemanticPreparationStatus = Literal["not_started", "running", "completed", "failed"]
+QuestionSuggestionStatus = Literal["not_started", "completed", "failed"]
 TransformationStatus = Literal["not_started", "pending", "running", "completed", "failed"]
 DataFlowNodeStatus = Literal["not_started", "waiting", "running", "completed", "failed"]
 CleanupStatus = Literal["completed", "skipped", "failed", "not_configured"]
@@ -103,7 +104,15 @@ class SemanticPreparationResponse(BaseModel):
     status: SemanticPreparationStatus
     message: str
     semantic_columns: list[SemanticColumnSummary]
-    suggested_questions: list[DatasetQuestionSuggestionSummary]
+    provider_runs: list[ProviderRunSummary]
+    next_action: str | None = None
+
+
+class QuestionSuggestionsResponse(BaseModel):
+    status: QuestionSuggestionStatus
+    message: str
+    suggestions: list[DatasetQuestionSuggestionSummary]
+    generated_from: Literal["data_marts"] = "data_marts"
     provider_runs: list[ProviderRunSummary]
     next_action: str | None = None
 
@@ -132,6 +141,7 @@ class DatasetDetailResponse(BaseModel):
     file: DatasetFileSummary | None = None
     schema_preview: SchemaPreview
     semantic_preparation: SemanticPreparationResponse
+    question_suggestions: QuestionSuggestionsResponse
 
 
 class DbtArtifactSummary(BaseModel):
@@ -181,6 +191,7 @@ class DatasetDataFlowResponse(BaseModel):
     edges: list[DataFlowEdgeSummary]
     artifacts: list[DbtArtifactSummary]
     models: dict[str, list[str]]
+    question_suggestions: QuestionSuggestionsResponse
 
 
 class DatasetTransformRequest(BaseModel):

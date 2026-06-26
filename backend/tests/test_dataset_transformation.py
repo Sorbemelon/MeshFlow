@@ -585,8 +585,19 @@ def test_raw_retail_transform_generates_data_mart_question_suggestions(
     )
     assert detail_response.status_code == 200
     detail = detail_response.json()
-    assert detail["semantic_preparation"]["suggested_questions"][0]["intent"] == (
-        "monthly_revenue_trend"
+    assert "suggested_questions" not in detail["semantic_preparation"]
+    assert detail["question_suggestions"]["status"] == "completed"
+    assert detail["question_suggestions"]["generated_from"] == "data_marts"
+    assert detail["question_suggestions"]["suggestions"][0]["intent"] == "monthly_revenue_trend"
+
+    data_flow_response = client.get(
+        f"/api/v1/datasets/{dataset_id}/data-flow",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+    assert data_flow_response.status_code == 200
+    data_flow = data_flow_response.json()
+    assert data_flow["question_suggestions"]["suggestions"][1]["intent"] == (
+        "product_category_revenue"
     )
 
 
