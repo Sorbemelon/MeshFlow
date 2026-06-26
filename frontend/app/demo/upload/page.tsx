@@ -31,7 +31,7 @@ const ip = {
 const WALKTHROUGH = [
   { n: "1", title: "Choose raw data", body: "Use the curated demo or upload your own CSV file." },
   { n: "2", title: "Review schema", body: "Inspect detected columns and confirm the mapping." },
-  { n: "3", title: "Transform with warehouse/dbt", body: "Build Staging → Intermediate → Dimensional Model → Data Marts." },
+  { n: "3", title: "Transform with warehouse/dbt", body: "Build Staging -> Intermediate -> Dimensional Model -> Data Marts." },
   { n: "4", title: "Ask the AI Analytics Engineer", body: "Attach your dataset and ask a question in plain language." },
   { n: "5", title: "Save charts to dashboard", body: "Validated results land as chart cards with evidence." },
 ];
@@ -331,7 +331,7 @@ export default function UploadPage() {
             Upload your own CSV
           </h2>
           <p className="mt-1 text-sm text-ink-soft">
-            MVP: one CSV file per dataset.
+            Upload CSV files within the session storage limit. Each file also gets a safety check before upload.
           </p>
 
           <input
@@ -356,7 +356,7 @@ export default function UploadPage() {
               </p>
             ) : (
               <p className="text-sm text-ink-muted">
-                Choose a CSV file — nothing is uploaded until you confirm.
+                Choose a CSV file; nothing is uploaded until you confirm.
               </p>
             )}
 
@@ -504,9 +504,9 @@ export default function UploadPage() {
           ) : null}
 
           <p className="mt-3 text-xs text-ink-muted">
-            MeshFlow validates the CSV and checks S3 + Snowflake readiness
+            MeshFlow validates the CSV, storage quota, and S3 + Snowflake readiness
             before any data is sent. Invalid or unsupported files are rejected
-            with a clear reason — no partial or invented success.
+            with a clear reason; no partial or invented success.
           </p>
         </div>
 

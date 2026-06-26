@@ -679,7 +679,7 @@ function DataFlowContent() {
                           type="button"
                           onClick={() => setManualDatasetId(dataset.id)}
                           className={cn(
-                            "min-w-0 cursor-pointer rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-surface",
+                            "min-w-0 cursor-pointer rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                             active ? "text-blue-800" : "text-ink-soft",
                           )}
                         >
@@ -693,13 +693,13 @@ function DataFlowContent() {
                             event.stopPropagation();
                             void handleDeleteDataset(dataset);
                           }}
-                          title="Remove dataset from the active workspace. Quota usage is not restored."
-                          className="cursor-pointer rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                          aria-label={`Remove ${datasetLabel(dataset)}`}
+                          title="Remove dataset from active workspace. Quota usage is not restored."
+                          className="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label={`Remove ${datasetLabel(dataset)} from active workspace`}
                         >
                           <svg
-                            width={15}
-                            height={15}
+                            width={17}
+                            height={17}
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
@@ -1301,20 +1301,27 @@ function DataFlowContent() {
 
                   {visibleActiveTab === "Schema Preview" ? (
                     <>
-                  <div className="mt-4 overflow-x-auto rounded-md border border-border">
-                    <table className="min-w-[1180px] divide-y divide-border text-left text-sm">
+                  <div
+                    className="mt-4 max-w-full overflow-x-auto overscroll-x-contain rounded-md border border-border"
+                  >
+                    <table className="w-full min-w-[960px] table-fixed divide-y divide-border text-left text-sm lg:min-w-[1040px]">
+                      <caption className="sr-only">
+                        Schema preview mappings. Scroll horizontally on small screens to review all columns.
+                      </caption>
                       <thead className="bg-surface-muted text-xs font-semibold text-ink-muted">
                         <tr>
-                          <th className="px-3 py-2">Use in model</th>
-                          <th className="px-3 py-2">Source column</th>
-                          <th className="px-3 py-2">Detected type</th>
-                          <th className="px-3 py-2">Null rate</th>
-                          <th className="px-3 py-2">Suggested name</th>
-                          <th className="px-3 py-2">Semantic role</th>
-                          <th className="px-3 py-2">Confidence</th>
-                          <th className="px-3 py-2">Review</th>
-                          <th className="px-3 py-2">Model field</th>
-                          <th className="px-3 py-2">Example values</th>
+                          <th className="sticky left-0 z-20 w-16 bg-surface-muted px-3 py-2 text-center shadow-[1px_0_0_#e2e8f0]">
+                            Use
+                          </th>
+                          <th className="w-40 px-3 py-2">Source column</th>
+                          <th className="w-28 px-3 py-2">Detected type</th>
+                          <th className="w-24 px-3 py-2">Null rate</th>
+                          <th className="w-52 px-3 py-2">Suggested name</th>
+                          <th className="w-36 px-3 py-2">Semantic role</th>
+                          <th className="w-28 px-3 py-2">Confidence</th>
+                          <th className="w-32 px-3 py-2">Review</th>
+                          <th className="w-56 px-3 py-2">Model field</th>
+                          <th className="w-56 px-3 py-2">Example values</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border bg-surface">
@@ -1328,7 +1335,7 @@ function DataFlowContent() {
                                 semanticColumn?.needs_review ? "bg-amber-50/35" : "",
                               )}
                             >
-                              <td className="px-3 py-2 text-center">
+                              <td className="sticky left-0 z-10 bg-inherit px-3 py-2 text-center shadow-[1px_0_0_#e2e8f0]">
                                 <input
                                   type="checkbox"
                                   checked={draft?.include_in_model ?? true}
@@ -1339,10 +1346,11 @@ function DataFlowContent() {
                                     })
                                   }
                                   aria-label={`Use ${column.raw_column_name} in model`}
+                                  className="h-4 w-4 rounded border-border text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed"
                                 />
                               </td>
                               <td className="px-3 py-2">
-                                <p className="font-mono text-xs text-ink">
+                                <p className="break-words font-mono text-xs leading-relaxed text-ink">
                                   {column.raw_column_name}
                                 </p>
                               </td>
@@ -1357,10 +1365,10 @@ function DataFlowContent() {
                               <td className="px-3 py-2">
                                 {semanticColumn ? (
                                   <div>
-                                    <p className="font-mono text-xs text-ink">
+                                    <p className="break-words font-mono text-xs text-ink">
                                       {semanticColumn.suggested_name}
                                     </p>
-                                    <p className="mt-1 max-w-[240px] text-xs leading-relaxed text-ink-muted">
+                                    <p className="mt-1 text-xs leading-relaxed text-ink-muted">
                                       {semanticColumn.reason}
                                     </p>
                                   </div>
@@ -1393,7 +1401,7 @@ function DataFlowContent() {
                                   <StatusBadge status="waiting" label="Pending" />
                                 )}
                               </td>
-                              <td className="min-w-[260px] px-3 py-2">
+                              <td className="px-3 py-2">
                                 <div className="grid gap-2">
                                   <input
                                     value={draft?.approved_name ?? ""}
@@ -1404,7 +1412,7 @@ function DataFlowContent() {
                                         approved_name: event.target.value,
                                       })
                                     }
-                                    className="w-full rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-xs text-ink"
+                                    className="w-full rounded-md border border-border bg-surface px-2.5 py-1.5 font-mono text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
                                   />
                                   <div className="flex items-center gap-2">
                                     <select
@@ -1416,7 +1424,7 @@ function DataFlowContent() {
                                           approved_role: event.target.value as SemanticRole,
                                         })
                                       }
-                                      className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-ink"
+                                      className="min-w-0 flex-1 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-ink focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-primary"
                                     >
                                       {SEMANTIC_ROLE_OPTIONS.map((role) => (
                                         <option key={role} value={role}>
@@ -1427,10 +1435,12 @@ function DataFlowContent() {
                                   </div>
                                 </div>
                               </td>
-                              <td className="max-w-[260px] px-3 py-2 font-mono text-xs text-ink-muted">
-                                {column.sample_values.length > 0
-                                  ? column.sample_values.join(", ")
-                                  : "No non-null sample"}
+                              <td className="px-3 py-2 font-mono text-xs leading-relaxed text-ink-muted">
+                                <span className="block max-h-16 overflow-y-auto whitespace-normal break-words">
+                                  {column.sample_values.length > 0
+                                    ? column.sample_values.join(", ")
+                                    : "No non-null sample"}
+                                </span>
                               </td>
                             </tr>
                           );
