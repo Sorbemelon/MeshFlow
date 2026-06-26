@@ -1,6 +1,6 @@
 # MeshFlow v2 AI Workflow
 
-Status: Final approved Phase 0 source document.
+Status: Final approved Phase 0 source document, aligned with approved Phase 10 implementation decisions.
 
 This document defines the AI workflow, provider routing, call counts, temperature strategy, validation rules, and failure behavior.
 
@@ -12,17 +12,59 @@ AI must not directly create final trusted product state without backend validati
 
 No AI task may produce fake successful output when providers fail.
 
-## 2. Approved AI task routing
+No deterministic fallback is allowed for semantic preparation, question suggestions, analysis plans, modeling proposals, charts, or insights.
+
+## 2. Active provider configuration
+
+The active app surface uses two Gemini API key slots and two Gemini model slots:
+
+```text
+GEMINI_API_KEY_1
+GEMINI_API_KEY_2
+GEMINI_MODEL_1
+GEMINI_MODEL_2
+OPENAI_API_KEY
+OPENAI_MODEL
+```
+
+Removed from the active app surface:
+
+```text
+GEMINI_API_KEY_3
+GEMINI_MODEL_3
+```
+
+For each Gemini model in a provider route, MeshFlow should try key 1 and key 2 before moving to the next provider/model step.
+
+Provider keys must never be exposed to the frontend or stored in provider evidence.
+
+## 3. Approved AI task routing
 
 Use task-based routing.
 
-### Semantic column suggestions and suggested questions
+For semantic preparation, post-mart question suggestions, analysis plans, and insights:
 
 ```text
-Gemini
-→ OpenAI fallback
-→ honest failure
+GEMINI_MODEL_1 with key 1/2
+-> OpenAI
+-> GEMINI_MODEL_2 with key 1/2
+-> honest failure
 ```
+
+For uploaded CSV modeling proposals:
+
+```text
+GEMINI_MODEL_1 with key 1/2
+-> GEMINI_MODEL_2 with key 1/2
+-> OpenAI
+-> honest failure
+```
+
+Fallback means a provider/model/key failed, was unavailable, hit a rate limit, or returned invalid structured output. Fallback does not mean accepting weaker or unvalidated product output.
+
+## 4. Semantic preparation
+
+Semantic preparation is column mapping only.
 
 Temperature:
 
@@ -33,20 +75,29 @@ Temperature:
 Tasks:
 
 ```text
-suggest column names
+suggest model-friendly column names
 suggest semantic roles
 provide confidence and reason
 mark needs_review when ambiguous
-generate dataset-specific suggested questions
 ```
 
-### Analysis plan generation
+Semantic preparation must not generate dataset-specific suggested questions.
+
+Semantic preparation output is exposed under:
 
 ```text
-OpenAI
-→ Gemini fallback
-→ honest failure
+semantic_preparation
+  status
+  semantic_columns
+  provider_runs
+  errors/warnings if any
 ```
+
+## 5. Post-mart question suggestions
+
+Dataset-specific suggested questions are generated only after dbt successfully builds Data Marts.
+
+Question suggestions are generated from the backend-known mart catalog, including available marts, metrics, dimensions, and grains. They are not generated from raw schema prep.
 
 Temperature:
 
@@ -54,73 +105,55 @@ Temperature:
 0.1
 ```
 
-Task:
+Question suggestions are exposed separately from semantic preparation:
 
 ```text
-turn attached dataset + user question into a structured analysis plan
+question_suggestions
+  status
+  suggestions
+  generated_from: data_marts
+  provider_runs
+  errors/warnings if any
 ```
 
-### Insight generation
+Frontend consumers should read `question_suggestions`, not `semantic_preparation.suggested_questions`.
+
+## 6. Uploaded CSV modeling proposals
+
+Uploaded CSV transformation may use an AI-assisted modeling proposal when the backend needs help choosing a conservative modeling approach.
+
+AI proposal input may include:
 
 ```text
-Gemini
-→ OpenAI fallback
-→ honest failure
+dataset profile
+approved semantic mappings
+column roles
+candidate identifiers
+candidate dates
+candidate measures
+sample value summaries
+known warnings
 ```
 
-Temperature:
+AI proposal output may describe:
 
 ```text
-0.2
+suggested fact grain
+candidate dimensions
+candidate measures
+candidate marts
+unsupported/needs-review reasons
 ```
 
-Task:
+The backend remains the owner of dbt SQL generation and validation.
 
-```text
-generate insight from actual Snowflake result preview
-```
+AI must not provide trusted executable dbt or Snowflake SQL without backend validation.
 
-Insight generation must happen after the Snowflake query succeeds.
+If the proposal is invalid, insufficient, or unsupported, MeshFlow returns an honest needs-review/unsupported state instead of fake marts.
 
-## 3. Gemini model lanes
+## 7. Normal AI call counts
 
-Use CentralDocs-style Gemini configuration:
-
-```text
-GEMINI_API_KEY_1
-GEMINI_API_KEY_2
-GEMINI_API_KEY_3
-
-GEMINI_MODEL_1
-GEMINI_MODEL_2
-GEMINI_MODEL_3
-```
-
-Gemini-owned tasks use:
-
-```text
-Gemini lane 1
-→ Gemini lane 2
-→ Gemini lane 3
-→ OpenAI fallback
-→ honest failure
-```
-
-For analysis plan generation:
-
-```text
-OpenAI
-→ Gemini lane 1
-→ Gemini lane 2
-→ Gemini lane 3
-→ honest failure
-```
-
-Provider keys must never be exposed to frontend.
-
-## 4. Normal AI call counts
-
-### Dataset preparation
+### Dataset preparation before transform
 
 Normal calls:
 
@@ -131,13 +164,33 @@ Normal calls:
 Purpose:
 
 ```text
-semantic column suggestions + dataset-specific suggested questions
+semantic column mapping suggestions only
 ```
 
 Provider order:
 
 ```text
-Gemini → OpenAI fallback
+GEMINI_MODEL_1 key 1/2 -> OpenAI -> GEMINI_MODEL_2 key 1/2
+```
+
+### Dataset question suggestions after Data Marts
+
+Normal calls:
+
+```text
+1 AI call
+```
+
+Purpose:
+
+```text
+suggest useful analysis questions from the mart catalog
+```
+
+Provider order:
+
+```text
+GEMINI_MODEL_1 key 1/2 -> OpenAI -> GEMINI_MODEL_2 key 1/2
 ```
 
 ### One new analysis question
@@ -150,14 +203,14 @@ Normal calls:
 
 | Call | Provider order | Purpose |
 |---|---|---|
-| 1 | OpenAI → Gemini | Structured analysis plan |
-| 2 | Gemini → OpenAI | Insight from Snowflake result |
+| 1 | GEMINI_MODEL_1 key 1/2 -> OpenAI -> GEMINI_MODEL_2 key 1/2 | Structured analysis plan |
+| 2 | GEMINI_MODEL_1 key 1/2 -> OpenAI -> GEMINI_MODEL_2 key 1/2 | Insight from Snowflake result |
 
 Snowflake execution is not an AI call.
 
-ChartSpec generation should be backend-controlled and validated.
+ChartSpec generation is backend-controlled and validated.
 
-## 5. Preparation AI input
+## 8. Preparation AI input
 
 Send compact profile information, not full raw datasets.
 
@@ -197,10 +250,6 @@ Example semantic output:
       "needs_review": true,
       "reason": "Numeric values detected, but business meaning is unclear."
     }
-  ],
-  "suggested_questions": [
-    "How is revenue performing?",
-    "Show revenue by product category."
   ]
 }
 ```
@@ -211,10 +260,10 @@ Rules:
 Low-confidence suggestions require review.
 Suggestions are stored after success.
 Do not regenerate on every page load.
-Regenerate only if profile/schema changes or user explicitly refreshes suggestions.
+Retry is allowed after an honest failure.
 ```
 
-## 6. Analysis plan input
+## 9. Analysis plan input
 
 Send compact analysis context:
 
@@ -226,7 +275,7 @@ source model schemas
 metrics and dimensions
 grain definitions
 semantic mapping summary
-suggested questions
+post-mart suggested questions if available
 recent analysis summary
 hard limits
 known warnings
@@ -235,7 +284,7 @@ user question
 
 Do not send full raw datasets.
 
-## 7. Analysis plan output
+## 10. Analysis plan output
 
 The AI must return structured JSON.
 
@@ -243,6 +292,7 @@ Example:
 
 ```json
 {
+  "decision_type": "create_new",
   "question": "How is revenue performing?",
   "intent": "performance_overview",
   "source_model": "mart_sales_performance",
@@ -250,21 +300,68 @@ Example:
   "metrics": [
     {
       "name": "total_revenue",
-      "expression": "SUM(revenue)"
+      "aggregation": "sum"
     }
   ],
-  "dimensions": ["order_month", "product_category"],
-  "charts": [
+  "dimensions": ["order_month"],
+  "filters": [],
+  "sort": [
     {
-      "type": "line",
-      "title": "Monthly Revenue Trend",
-      "x": "order_month",
-      "y": "total_revenue"
+      "field": "order_month",
+      "direction": "asc"
     }
   ],
+  "limit": 100,
+  "assumptions": [],
   "warnings": []
 }
 ```
+
+The provider must not provide executable SQL as the trusted output. Backend generates the SQL from the validated plan.
+
+## 11. Backend validation rules
+
+Before executing anything, backend validates:
+
+```text
+attached dataset exists
+attached dataset belongs to session
+attached dataset is not deleted
+attached dataset is ready for analysis
+source model exists
+columns exist
+metrics are allowed
+dimensions are allowed
+filters reference allowed fields
+limit is bounded
+chart count <= 3 if chart hints exist
+chart type is supported if chart hints exist
+grain is known or marked uncertain
+no unknown table references
+no unsafe commands
+provider output matches schema
+no secrets in output
+```
+
+If validation fails, try fallback provider for the same task. If fallback fails, return honest failure.
+
+## 12. SQL generation
+
+Backend generates safe SELECT-only SQL from the validated plan.
+
+Snowflake SELECT execution happens only after plan validation.
+
+Provider-generated SQL is not trusted as executable product logic.
+
+## 13. ChartSpec generation
+
+Backend ChartSpec service generates final ChartSpec from stored result schema and preview rows.
+
+AI can suggest chart intent only if validation supports it.
+
+Frontend receives validated ChartSpec and data snapshots.
+
+ChartSpec must not include Recharts component code.
 
 Default chart count:
 
@@ -278,52 +375,11 @@ Maximum chart count:
 3 charts
 ```
 
-Use more than one chart only when one chart cannot fully answer the prompt.
+Use more than one chart only when the result shape justifies it.
 
-## 8. Backend validation rules
+## 14. Insight generation input
 
-Before executing anything, backend validates:
-
-```text
-attached dataset exists
-attached dataset belongs to session
-attached dataset is not deleted
-attached dataset is ready for analysis
-source model exists
-columns exist
-metrics are allowed
-dimensions are allowed
-chart count <= 3
-chart type is supported
-grain is known or marked uncertain
-SQL is SELECT-only if SQL exists
-no unknown table references
-no unsafe commands
-provider output matches schema
-no secrets in output
-```
-
-If validation fails, try fallback provider for the same task. If fallback fails, return honest failure.
-
-## 9. SQL generation
-
-Backend should generate safe SQL from validated plan where possible.
-
-The AI should not be trusted to supply final executable SQL without validation.
-
-Snowflake SELECT execution happens only after plan validation.
-
-## 10. ChartSpec generation
-
-Backend ChartSpec service generates or validates final ChartSpec.
-
-AI can suggest chart intent, but frontend receives validated ChartSpec.
-
-ChartSpec must not include Recharts component code.
-
-## 11. Insight generation input
-
-Insight call happens after Snowflake result exists.
+Insight generation happens after Snowflake result data and ChartSpec snapshots exist.
 
 Input includes:
 
@@ -334,30 +390,36 @@ metric definitions
 dimensions
 grain
 chart titles
-small result preview
+ChartSpecs
+small stored result preview
 known limitations
 warnings
 ```
 
-## 12. Insight output
+## 15. Insight output
 
 Example:
 
 ```json
 {
-  "summary": "Revenue increased steadily across the selected period.",
-  "key_findings": [
-    "March had the highest revenue in the previewed period.",
-    "The monthly trend shows consistent growth."
-  ],
-  "tags": ["trend", "revenue"],
-  "confidence": "medium"
+  "question_insight": {
+    "summary": "Revenue increased steadily across the selected period.",
+    "key_findings": [
+      "March had the highest revenue in the previewed period.",
+      "The monthly trend shows consistent growth."
+    ],
+    "tags": ["trend", "revenue"],
+    "confidence": "medium"
+  },
+  "chart_insights": []
 }
 ```
 
 No insight may be guessed before result data exists.
 
-## 13. Failure behavior
+If insight generation fails after analysis and charts succeed, the analysis remains completed and insight status is failed/unavailable.
+
+## 16. Failure behavior
 
 If all providers fail for a task:
 
@@ -371,10 +433,10 @@ show no fake success
 Example:
 
 ```text
-Analysis could not be generated because OpenAI failed and all Gemini fallback lanes returned invalid plan output. No chart was generated.
+Analysis could not be generated because all configured provider attempts returned errors or invalid plan output. No chart was generated.
 ```
 
-## 14. Provider evidence
+## 17. Provider evidence
 
 Provider runs should store:
 
@@ -382,10 +444,10 @@ Provider runs should store:
 task type
 provider
 model
-lane
-temperature
+temperature where tracked
 status
 error code/message
+fallback source where tracked
 latency
 created time
 ```
@@ -400,7 +462,7 @@ Failed
 
 Full provider chain belongs in Analysis Detail or History detail.
 
-## 15. AI Analytics Engineer UI requirement
+## 18. AI Analytics Engineer UI requirement
 
 The question input must explicitly attach a dataset.
 

@@ -35,9 +35,9 @@ Expired session: Start New Session
 Continue destination:
 
 ```text
-if dataset is in schema review/transformation → /demo/data-flow
-else if dashboard has cards → /demo/dashboard
-else → /demo/upload
+if dataset is in schema review/transformation -> /demo/data-flow
+else if dashboard has cards -> /demo/dashboard
+else -> /demo/upload
 ```
 
 ## 3. Workspace routes
@@ -81,7 +81,7 @@ Accessible whenever session is active.
 If no dataset:
 
 ```text
-show Upload Dataset button
+show no-dataset empty state with a route back to /demo/upload
 show empty Schema Preview
 keep page visible
 keep later tabs disabled/inactive
@@ -116,12 +116,12 @@ Recommended production limits:
 ```text
 Retention: 3 days
 Raw Retail Demo: can be added once per session
-Uploaded datasets: 1 uploaded dataset per session
+Uploaded CSVs: controlled by storage quota, not public count quota
 Files: MVP = 1 CSV file per uploaded dataset
 Future files: up to 3 files per dataset
 Upload size: 5 MB per file
 Total upload size: 10 MB per session
-Analysis: 10 successful analysis runs per session
+Analysis: 8 successful analysis runs per session
 Charts: default 1 chart per analysis, max 3
 Dashboard: 1 dashboard per session
 Dashboard cards: max 8 successful cards
@@ -135,10 +135,12 @@ Successful processing increments product usage.
 Examples:
 
 ```text
-successful upload/load increments uploaded dataset/file usage
+successful upload/load increments stored upload size usage
 successful analysis increments analysis usage
 successful dashboard card creation increments dashboard card usage
 ```
+
+Failed validation, preflight, upload, or load does not consume upload storage quota.
 
 Failures do not consume product usage quota.
 
@@ -176,7 +178,8 @@ dataset files metadata
 S3 uploaded objects
 Snowflake session schemas/tables
 generated dbt artifacts/metadata
-semantic suggestions
+semantic column mappings
+question suggestions
 data flow nodes/edges
 analysis outputs
 dashboard cards
@@ -215,7 +218,8 @@ dataset metadata
 S3 uploaded objects
 Snowflake session schemas/tables
 generated dbt artifacts/metadata
-semantic suggestions
+semantic column mappings
+question suggestions
 data flow nodes/edges
 analysis outputs
 dashboard cards
@@ -240,19 +244,20 @@ Upload Dataset page flow:
 
 ```text
 Browse
-→ user selects file
-→ frontend validates file
-→ backend validates file
-→ check S3 readiness
-→ check Snowflake readiness
-→ enable Upload
-→ Upload clicked
-→ S3 upload
-→ Snowflake Warehouse Raw load
-→ profile schema
-→ AI semantic suggestions
-→ navigate to /demo/data-flow
-→ show Schema Preview
+-> user selects file
+-> frontend validates file
+-> backend validates file
+-> check storage quota
+-> check S3 readiness
+-> check Snowflake readiness
+-> enable Upload
+-> Upload clicked
+-> S3 upload
+-> Snowflake Warehouse Raw load
+-> profile schema
+-> Schema Preview with deterministic profile
+-> navigate to /demo/data-flow
+-> show Schema Preview
 ```
 
 If validation/readiness fails:
@@ -268,11 +273,13 @@ Upload disabled
 Data Flow Schema Preview flow:
 
 ```text
-user reviews/edits mapping
-→ Transform clicked
-→ dbt runs all preparation layers
-→ success: navigate to /demo/dashboard
-→ failure: stay on /demo/data-flow and keep Transform available for retry
+user optionally generates semantic column mapping suggestions
+-> user reviews/edits/saves mapping
+-> Transform clicked
+-> dbt runs all preparation layers
+-> question suggestions generated from Data Marts
+-> success: navigate to /demo/dashboard
+-> failure: stay on /demo/data-flow and keep Transform available for retry
 ```
 
 If successful:

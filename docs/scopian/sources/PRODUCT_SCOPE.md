@@ -1,6 +1,6 @@
 # MeshFlow v2 Product Scope
 
-Status: Final approved Phase 0 source document.
+Status: Final approved Phase 0 source document, aligned with approved Phase 10 implementation decisions.
 
 This document is a Scopian source. It defines the approved product scope for MeshFlow v2 and supersedes older MeshFlow prototype assumptions.
 
@@ -12,13 +12,17 @@ It turns raw dataset files into explainable analytical outputs through:
 
 ```text
 Raw Input
-→ Warehouse Raw
-→ Staging
-→ Intermediate
-→ Dimensional Model
-→ Data Marts
-→ AI-generated analysis
-→ Dashboard charts with evidence
+-> AWS S3
+-> Snowflake Warehouse Raw
+-> Schema Profile
+-> Semantic Column Mapping
+-> dbt Staging
+-> Intermediate
+-> Dimensional Model
+-> Data Marts
+-> Question Suggestions
+-> AI-generated analysis
+-> Dashboard charts with evidence
 ```
 
 Correct positioning:
@@ -64,13 +68,13 @@ connected to a real data preparation flow
 It should not feel like:
 
 ```text
-Upload CSV → ask chatbot → random chart
+Upload CSV -> ask chatbot -> random chart
 ```
 
 It should feel like:
 
 ```text
-Raw dataset → warehouse/dbt model → data mart → AI analysis plan → Snowflake result → ChartSpec → dashboard → evidence
+Raw dataset -> warehouse/dbt model -> data mart -> AI analysis plan -> Snowflake result -> ChartSpec -> dashboard -> evidence
 ```
 
 ## 4. Final data preparation layers
@@ -79,11 +83,11 @@ Use these exact layer names in the Data Flow preparation rail:
 
 ```text
 Raw Input
-→ Warehouse Raw
-→ Staging
-→ Intermediate
-→ Dimensional Model
-→ Data Marts
+-> Warehouse Raw
+-> Staging
+-> Intermediate
+-> Dimensional Model
+-> Data Marts
 ```
 
 Do not include these in the preparation rail:
@@ -143,12 +147,16 @@ The demo dataset can be added only once per session.
 
 The first upload MVP supports one CSV file per uploaded dataset.
 
+Public upload quota is storage-based, not count-based. A session may upload multiple CSV datasets if file-size validation passes and total upload storage remains within quota.
+
 The architecture may remain future-ready for multiple files, but the UI must be honest:
 
 ```text
-MVP: one CSV file
+MVP: one CSV file per uploaded dataset
 Future: up to three files per dataset
 ```
+
+Generic uploaded CSV transformation remains conservative. AI-assisted modeling proposals may help choose an approach, but backend-owned dbt SQL generation and validation remain required.
 
 ## 6. Workspace scope
 
@@ -208,10 +216,12 @@ AI analysis generation must explicitly attach a dataset. It must not rely on hid
 
 ## 8. AI scope
 
-AI is used for three task groups:
+AI is used for these task groups:
 
 ```text
-semantic column suggestions and dataset-specific suggested questions
+semantic column mapping suggestions
+post-Data-Marts suggested questions
+uploaded CSV modeling proposals
 analysis plan generation
 insight generation after result data exists
 ```
@@ -219,6 +229,10 @@ insight generation after result data exists
 AI must return structured output where applicable.
 
 AI must not directly control final product behavior. Backend validation decides what is accepted.
+
+Semantic preparation is column mapping only. Suggested questions are generated after dbt/Data Marts from the backend-known mart catalog.
+
+No deterministic fallback is allowed.
 
 ## 9. Chart scope
 

@@ -1,6 +1,6 @@
 # MeshFlow v2 Data Selection UX
 
-Status: Final approved Phase 0 source document.
+Status: Final approved Phase 0 source document, aligned with approved Phase 10 implementation decisions.
 
 This document defines dataset selection, deletion, attachment, dashboard card preservation, and page-specific data behavior.
 
@@ -25,11 +25,11 @@ This replaces the earlier idea that one active dataset controls all pages.
 Common statuses:
 
 ```text
-created
-raw_loaded
 schema_review
+warehouse_loaded
 transforming
-ready
+ready_for_analysis
+transform_failed
 failed
 deleted
 ```
@@ -37,12 +37,12 @@ deleted
 Meaning:
 
 ```text
-created: dataset record exists
-raw_loaded: file/demo is loaded to Warehouse Raw
-schema_review: profile and semantic suggestions are ready for review
+schema_review: Warehouse Raw/profile exists and schema mapping can be reviewed
+warehouse_loaded: file/demo is loaded to Warehouse Raw
 transforming: dbt transformation is running
-ready: Data Marts are ready for analysis
-failed: latest preparation step failed
+ready_for_analysis: Data Marts are ready for analysis
+transform_failed: latest transformation failed and can be retried
+failed: latest preparation/load step failed
 deleted: removed from active management but historical snapshots remain
 ```
 
@@ -60,10 +60,11 @@ button disabled after added
 Uploaded CSV:
 
 ```text
-MVP supports one uploaded CSV dataset per session
+public quota is total upload storage, not uploaded CSV count
+MVP supports one CSV file per uploaded dataset
 button is Browse first
 button changes to Upload after file selection
-Upload stays disabled until file validation + S3 readiness + Snowflake readiness pass
+Upload stays disabled until file validation + storage quota + S3 readiness + Snowflake readiness pass
 ```
 
 After successful upload/demo add:
@@ -95,10 +96,10 @@ deleted datasets only where historical context requires showing them
 If no dataset exists:
 
 ```text
-show Upload Dataset button
 keep Data Flow page visible
 show Schema Preview empty state
 keep later tabs disabled/inactive
+offer a route back to /demo/upload without adding an Upload button under the selector
 ```
 
 ## 5. Dataset dropdown delete/bin action
@@ -135,7 +136,7 @@ history evidence snapshots
 To preserve outputs after dataset deletion:
 
 ```text
-analysis runs store dataset/source model snapshots
+analysis runs expose dataset/source model snapshots or deleted-dataset markers
 analysis charts store chart data snapshots
 dashboard cards store card snapshots
 history displays snapshots, not live dataset-only fields
@@ -172,7 +173,7 @@ UI:
 
 ```text
 Attach dataset:
-[ Raw Retail Transactions Demo ▼ ]
+[ Raw Retail Transactions Demo ]
 
 Question:
 [ How is revenue performing? ]
@@ -211,20 +212,19 @@ This avoids hidden selected-dataset bugs.
 
 ## 9. Suggested questions
 
-Suggested questions are generated per dataset during preparation.
+Suggested questions are generated after dbt successfully builds Data Marts.
 
-Example:
+They use the backend-known mart catalog:
 
 ```text
-Raw Retail Transactions Demo:
-- How is revenue performing?
-- Show revenue by product category.
-- What products are driving sales?
-- Compare customer segments.
-- Show monthly sales trend.
+available marts
+available metrics
+available dimensions
+grain definitions
+known limitations
 ```
 
-Dashboard AI panel shows suggestions for the currently attached dataset.
+Dashboard AI panel shows suggestions for the currently attached ready dataset.
 
 If suggestion generation failed:
 
@@ -247,7 +247,7 @@ status
 question
 chart count
 source model
-provider mode
+provider mode or insight status
 created time
 ```
 
@@ -268,9 +268,9 @@ Deleting a dataset or card does not reduce successful usage counts.
 Examples:
 
 ```text
-User successfully uploads one dataset.
-User deletes it.
-Uploaded dataset quota remains used.
+User successfully uploads 4 MB of CSV data.
+User deletes the dataset.
+Total upload storage used remains 4 MB.
 ```
 
 ```text
@@ -280,6 +280,8 @@ Visible cards = 5.
 Used dashboard card quota = 8.
 ```
 
+Reset in production also does not restore successful usage.
+
 ## 12. Page empty states
 
 ### Data Flow with no dataset
@@ -287,14 +289,12 @@ Used dashboard card quota = 8.
 ```text
 No dataset available yet.
 Upload a dataset or use the Raw Retail Demo to start.
-[Upload Dataset]
 ```
 
 ### Dashboard with no ready dataset
 
 ```text
 Prepare a dataset before asking the AI Analytics Engineer.
-[Upload Dataset]
 ```
 
 ### History with no analysis

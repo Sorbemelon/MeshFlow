@@ -48,32 +48,40 @@ Dataset preparation:
 
 ```text
 Raw Input
-→ S3 object
-→ Snowflake Warehouse Raw table
-→ warehouse profiling
-→ AI semantic column suggestions
-→ user schema review
-→ dbt Staging
-→ dbt Intermediate
-→ Dimensional Model
-→ Data Marts
-→ dataset ready for analysis
+-> S3 object
+-> Snowflake Warehouse Raw table
+-> warehouse profiling
+-> semantic column mapping suggestions/review
+-> dbt Staging
+-> dbt Intermediate
+-> Dimensional Model
+-> Data Marts
+-> post-mart question suggestions
+-> dataset ready for analysis
 ```
 
 Analysis workflow:
 
 ```text
 attached dataset + user question
-→ OpenAI analysis plan
-→ Gemini fallback if needed
-→ backend validates plan
-→ backend creates safe Snowflake SELECT
-→ Snowflake returns result rows
-→ backend validates/generates ChartSpec
-→ Gemini insight generation
-→ OpenAI fallback if needed
-→ dashboard card/result group
-→ history/evidence snapshot
+-> provider-routed analysis plan
+-> backend validates plan
+-> backend creates safe Snowflake SELECT
+-> Snowflake returns result rows
+-> backend validates/generates ChartSpec
+-> provider-routed insight generation
+-> dashboard card/result group
+-> history/evidence snapshot
+```
+
+Provider routing:
+
+```text
+semantic preparation, question suggestions, analysis plans, insights:
+GEMINI_MODEL_1 key 1/2 -> OpenAI -> GEMINI_MODEL_2 key 1/2 -> honest failure
+
+uploaded CSV modeling proposal:
+GEMINI_MODEL_1 key 1/2 -> GEMINI_MODEL_2 key 1/2 -> OpenAI -> honest failure
 ```
 
 ## 4. Repository shape
@@ -141,10 +149,8 @@ backend/
         demo_sessions.py
         workspace.py
         datasets.py
-        data_flow.py
         analysis_runs.py
         dashboard.py
-        history.py
         limits.py
         health.py
     core/
@@ -171,13 +177,14 @@ backend/
       dataset_service.py
       storage_service.py
       snowflake_service.py
-      dbt_service.py
+      dbt_transformation_service.py
       profile_service.py
-      semantic_column_service.py
-      data_flow_service.py
-      analysis_service.py
-      chart_spec_service.py
-      insight_service.py
+      semantic_preparation_service.py
+      question_suggestion_service.py
+      modeling_proposal_service.py
+      analysis_run_service.py
+      chartspec_service.py
+      insight_generation_service.py
       dashboard_service.py
       provider_router.py
       cleanup_service.py
@@ -300,7 +307,8 @@ PostgreSQL stores:
 sessions
 datasets
 profiles
-semantic suggestions
+semantic column mappings
+question suggestions
 preparation status
 analysis runs
 chart snapshots
@@ -308,7 +316,7 @@ dashboard cards
 history
 provider runs
 usage limits
-cleanup runs
+cleanup behavior/results
 ```
 
 PostgreSQL is not the analytical warehouse.

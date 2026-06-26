@@ -2,33 +2,33 @@ sources:
   - id: SRC-ai-workflow
     path: docs/scopian/sources/AI_WORKFLOW.md
     status: active
-    content_hash: sha256:a77e00b72623804082c5830082e12ae7a5869335ce08af020990bc733c599734
+    content_hash: sha256:4f318c49a0ad88220a702abe83042eb887723cbd2533f85561625414f2e35b91
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-api-contract
     path: docs/scopian/sources/API_CONTRACT.md
     status: active
-    content_hash: sha256:646d49cd4ba0bc4dfaf0f8cdffeff35d23608f7f973fe384587039f2541fe32b
+    content_hash: sha256:0d433fe863f8cc33bf63a97b864e9b2f3005cd97c3c98627713d48e737c80f62
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-build-phases
     path: docs/scopian/sources/BUILD_PHASES.md
     status: active
-    content_hash: sha256:3935d01c9073d8d70cdffbeb46fdfddcd8f57792ba818908ee7fa8317828cd28
+    content_hash: sha256:f3a6d5bce1edfefbf0555d5afb3f0aabddbf7efe86d444688ab8f5b08f7cac8b
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-data-model
     path: docs/scopian/sources/DATA_MODEL.md
     status: active
-    content_hash: sha256:26d16b387a119bafca06bea19be125d50c092414417087c9f4302ece90951649
+    content_hash: sha256:345259de0bd385ef9dce5fa4dc437611b2cb118087776c652d696720dfc47525
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-data-selection-ux
     path: docs/scopian/sources/DATA_SELECTION_UX.md
     status: active
-    content_hash: sha256:bd9d319a4be5fe83327f0c0dcfd7434acb0252b9d9cd5ad1e414216c5f5c81ae
+    content_hash: sha256:0f68ec4e47a788ebecea8a0121aa23dd575789f7082d75a572173e94024a8a4d
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-design
     path: DESIGN.md
     status: active
@@ -38,9 +38,9 @@ sources:
   - id: SRC-frontend-ux-scope
     path: docs/scopian/sources/FRONTEND_UX_SCOPE.md
     status: active
-    content_hash: sha256:9dbd222f45834907ce53736e8db78d5c82422bd9cd2d3169ef138ce03c7ee540
+    content_hash: sha256:185ff2bd5a075911b4fdef6b5b84450185f0ff099f792827631925d1dbd95df0
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-legacy-reference-rules
     path: docs/scopian/sources/LEGACY_REFERENCE_RULES.md
     status: active
@@ -50,9 +50,9 @@ sources:
   - id: SRC-maintenance-rules
     path: docs/scopian/sources/MAINTENANCE_RULES.md
     status: active
-    content_hash: sha256:4d579eb37606b6e47199338f365063140b5d7c6daa3a4d0d3712128f62157815
+    content_hash: sha256:4dd733005fe4e78516fac36a2b7c48ab30b0c2c8691cbec7dd54cd97a65d48b9
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-product
     path: PRODUCT.md
     status: active
@@ -62,24 +62,24 @@ sources:
   - id: SRC-product-scope
     path: docs/scopian/sources/PRODUCT_SCOPE.md
     status: active
-    content_hash: sha256:2f6c4329924e8ed44689b29ba218c81fa8fe5f000f58a87b76f8d190eff5e214
+    content_hash: sha256:1b56a72550aed07c6726f8a64c144073b75c52524fe345d04699626b8c20fb1e
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-session-limits-and-navigation
     path: docs/scopian/sources/SESSION_LIMITS_AND_NAVIGATION.md
     status: active
-    content_hash: sha256:ad9d058c588b09bb93402e5777e7e411d07cbba73775f52a884124afe8eab3fa
+    content_hash: sha256:d4414634beae7d2ac5640954246c74c97d7f4a319ea2e63fef35772562b85a49
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-system-architecture
     path: docs/scopian/sources/SYSTEM_ARCHITECTURE.md
     status: active
-    content_hash: sha256:5c85a3a33fe5d0e42ce7e915cf7897ced7134d58d84baba1d74f31d35a8a4d41
+    content_hash: sha256:43b676c84e0de3df8cb34ea71b063de7d94d4f1336b1b5fab0d55bcdf25a124d
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00
   - id: SRC-warehouse-dbt-execution
     path: docs/scopian/sources/WAREHOUSE_DBT_EXECUTION.md
     status: active
-    content_hash: sha256:b02c43a20d8f9ea10d73cb207442e04da879ce752caed3064feceb3413b72af7
+    content_hash: sha256:dbd19c082b1244d6ffde6a1d1461992a6b3ebf5c51528c9f5fcf9d4e60a87d77
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-15T15:20:52+07:00
+    updated_at: 2026-06-26T16:29:39+07:00

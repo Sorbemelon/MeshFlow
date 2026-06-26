@@ -12,12 +12,12 @@ The impressive part should be product clarity:
 
 ```text
 raw data
-→ warehouse/dbt preparation
-→ dimensional model
-→ data marts
-→ validated AI analysis
-→ dashboard
-→ evidence
+-> warehouse/dbt preparation
+-> dimensional model
+-> data marts
+-> validated AI analysis
+-> dashboard
+-> evidence
 ```
 
 Not repo complexity.
@@ -30,9 +30,10 @@ Keep the MVP inside this budget:
 Primary frontend routes: 5 total
 Workspace pages: 4
 Dashboard count: 1
-MVP uploaded dataset: 1 CSV
+MVP uploaded dataset: 1 CSV file per uploaded dataset
+Upload quota: storage-based session quota
 MVP chart types: 5
-Main backend API groups: about 8-9
+Main backend API groups: about 7
 No auth
 No billing
 No teams
@@ -268,13 +269,15 @@ Core groups:
 /demo-sessions
 /workspace
 /datasets
-/data-flow
 /analysis-runs
 /dashboard
-/history
 /limits
 /health
 ```
+
+Data Flow is dataset-scoped under `/datasets/{dataset_id}/data-flow`.
+
+History is served by `/analysis-runs` list/detail.
 
 The frontend shell should primarily use:
 
@@ -306,7 +309,7 @@ Frontend should cover or manually verify:
 
 ```text
 route guards
-Browse → Upload states
+Browse -> Upload states
 no dataset empty states
 Data Flow rail statuses
 Transform button behavior

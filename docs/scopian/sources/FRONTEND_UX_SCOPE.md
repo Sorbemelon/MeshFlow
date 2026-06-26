@@ -12,11 +12,11 @@ The UI should make the workflow obvious:
 
 ```text
 Upload raw data
-→ review schema
-→ transform with warehouse/dbt
-→ ask AI Analytics Engineer
-→ add results to one dashboard
-→ inspect history/evidence
+-> review schema
+-> transform with warehouse/dbt
+-> ask AI Analytics Engineer
+-> add results to one dashboard
+-> inspect history/evidence
 ```
 
 Do not overbuild.
@@ -105,13 +105,13 @@ Architecture strip:
 
 ```text
 Raw Input
-→ S3
-→ Snowflake
-→ dbt
-→ Dimensional Model
-→ Data Marts
-→ AI Analysis
-→ Dashboard
+-> S3
+-> Snowflake
+-> dbt
+-> Dimensional Model
+-> Data Marts
+-> AI Analysis
+-> Dashboard
 ```
 
 CTA behavior:
@@ -160,10 +160,10 @@ workspace home + raw demo selection + CSV upload
 Sections:
 
 ```text
-Session/quota card
 Raw Retail Demo card
 Upload CSV card
-Available datasets summary
+Demo Walkthrough/right-side guidance
+storage-based limits/status where useful
 ```
 
 ### Raw Retail Demo card
@@ -226,8 +226,8 @@ Dataset selector belongs in the left rail so users clearly see which dataset the
 If no dataset exists:
 
 ```text
-show Upload Dataset button
-navigate to /demo/upload
+show no-dataset empty state
+offer navigation back to /demo/upload outside the selector
 keep page visible
 keep tabs visible but disabled/inactive where appropriate
 ```
@@ -317,7 +317,7 @@ AI input must explicitly attach a dataset:
 ```text
 Attach dataset: [dataset dropdown]
 Question input
-Suggested questions for attached dataset
+Suggested questions for attached ready dataset after Data Marts exist
 ```
 
 Do not rely on hidden global selected dataset.
@@ -387,8 +387,8 @@ Use:
 
 ```text
 ChartSpec
-→ Recharts renderer
-→ Tailwind/shadcn-style chart cards
+-> Recharts renderer
+-> Tailwind/shadcn-style chart cards
 ```
 
 Do not use Plotly as the main renderer.

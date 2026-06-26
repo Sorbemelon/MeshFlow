@@ -212,7 +212,7 @@ Claude scope:
 ```text
 Upload Dataset page
 Raw Retail Demo card
-Browse → Upload button behavior
+Browse -> Upload button behavior
 readiness loading state
 validation error UI
 Demo Dataset Added disabled state
@@ -237,7 +237,7 @@ feat: add upload validation and warehouse readiness
 feat: build upload dataset page
 ```
 
-## 8. Phase 5 — Schema preview and semantic suggestions
+## 8. Phase 5 - Schema preview and semantic column mapping
 
 Owner: Codex + Claude Code.
 
@@ -246,10 +246,9 @@ Codex scope:
 ```text
 warehouse raw profiling
 column_profiles storage
-Gemini three-lane provider setup
-OpenAI fallback
-semantic suggestions at temperature 0.1
-suggested dataset questions
+two-key/two-model Gemini provider setup
+approved provider fallback routing
+semantic column mapping suggestions at temperature 0.1
 schema mapping API
 ```
 
@@ -332,11 +331,11 @@ Codex scope:
 ```text
 analysis run endpoint
 attached_dataset_id required
-OpenAI analysis plan → Gemini fallback
+provider-routed analysis plan
 plan validation
 Snowflake SELECT
 ChartSpec generation/validation
-Gemini insight → OpenAI fallback
+provider-routed insight generation
 provider runs
 analysis/chart/insight snapshots
 ```
@@ -346,7 +345,7 @@ Claude scope:
 ```text
 AI Analytics Engineer panel
 explicit attached dataset selector
-suggested questions
+post-Data-Marts suggested questions
 analysis state UI
 generated result group display
 ```

@@ -1,6 +1,6 @@
 # MeshFlow v2 Warehouse and dbt Execution
 
-Status: Final approved Phase 0 source document.
+Status: Final approved Phase 0 source document, aligned with approved Phase 10 implementation decisions.
 
 This document defines the warehouse-only execution model for MeshFlow v2.
 
@@ -12,15 +12,18 @@ Required execution path:
 
 ```text
 Raw Input
-→ S3
-→ Snowflake Warehouse Raw
-→ dbt Staging
-→ dbt Intermediate
-→ dbt Dimensional Model
-→ dbt Data Marts
-→ Snowflake analysis SELECT
-→ ChartSpec
-→ Dashboard
+-> S3
+-> Snowflake Warehouse Raw
+-> Schema Profile
+-> Semantic Column Mapping
+-> dbt Staging
+-> dbt Intermediate
+-> dbt Dimensional Model
+-> dbt Data Marts
+-> Question Suggestions
+-> Snowflake analysis SELECT
+-> ChartSpec
+-> Dashboard
 ```
 
 Removed completely:
@@ -69,7 +72,7 @@ Frontend quick validation:
 
 ```text
 file exists
-file size <= 5 MB
+file size <= configured safety limit
 extension is .csv
 not empty
 basic CSV parse succeeds
@@ -83,6 +86,7 @@ Backend authoritative validation:
 ```text
 file type is allowed
 file size is allowed
+total upload storage quota is available
 CSV parser can read it
 headers are non-empty
 headers are unique after normalization
@@ -101,6 +105,7 @@ After file browse/selection:
 
 ```text
 validate file
+check total upload storage quota
 check S3 readiness
 check Snowflake readiness
 enable Upload only if all pass
@@ -111,6 +116,7 @@ When Upload is clicked:
 ```text
 upload to S3 under a session-scoped key
 record s3_uri and object metadata
+increment stored upload size only after successful stored upload/load
 continue to Snowflake load
 ```
 
@@ -127,7 +133,7 @@ After S3 upload, MeshFlow loads data to Snowflake Warehouse Raw.
 Expected behavior:
 
 ```text
-create/use session-scoped schema
+create/use session-scoped schema or safe session-scoped table names
 create raw table with safe column names
 load from S3 stage or configured storage integration
 record raw table metadata
@@ -165,12 +171,15 @@ value distribution where safe
 
 Profiling does not require AI.
 
-## 8. Semantic suggestions
+## 8. Semantic column mapping
 
-After profiling, call AI:
+After profiling, MeshFlow may call AI for column-mapping suggestions:
 
 ```text
-Gemini → OpenAI fallback → honest failure
+GEMINI_MODEL_1 with key 1/2
+-> OpenAI
+-> GEMINI_MODEL_2 with key 1/2
+-> honest failure
 ```
 
 Temperature:
@@ -187,10 +196,11 @@ semantic roles
 confidence
 needs_review
 reason
-dataset-specific suggested questions
 ```
 
 The user reviews mappings in Schema Preview before Transform.
+
+Semantic preparation is column mapping only. It must not generate dataset-specific suggested questions.
 
 ## 9. dbt transformation layers
 
@@ -219,7 +229,7 @@ standardize values
 Example:
 
 ```text
-raw_retail_transactions → stg_retail_transactions
+raw_retail_transactions -> stg_retail_transactions
 ```
 
 ### Intermediate
@@ -265,7 +275,7 @@ UI note:
 Pattern: star-schema-style dimensional model
 ```
 
-Do not call the main layer “Star Schema.” Use “Dimensional Model.”
+Do not call the main layer "Star Schema." Use "Dimensional Model."
 
 ### Data Marts
 
@@ -284,7 +294,26 @@ mart_customer_segments
 mart_store_performance
 ```
 
-## 10. Transform button behavior
+## 10. Uploaded CSV modeling
+
+Generic uploaded CSV transformation remains conservative.
+
+When deterministic mapping is insufficient, MeshFlow may request an AI-assisted modeling proposal:
+
+```text
+GEMINI_MODEL_1 with key 1/2
+-> GEMINI_MODEL_2 with key 1/2
+-> OpenAI
+-> honest failure
+```
+
+The backend owns dbt SQL generation and validation.
+
+The AI proposal is not trusted executable SQL.
+
+If a generic uploaded CSV lacks enough semantic mapping for meaningful Data Marts, return a clear needs-review/unsupported state instead of fake marts.
+
+## 11. Transform button behavior
 
 Show Transform when:
 
@@ -314,7 +343,7 @@ show clear reason
 keep Transform button for retry
 ```
 
-## 11. dbt execution evidence
+## 12. dbt execution evidence
 
 Data Flow tabs should show compact evidence:
 
@@ -324,6 +353,8 @@ layer
 status
 short explanation
 collapsed SQL/schema.yml/details
+selected columns and approved mappings
+source -> staging -> intermediate -> dimensional model -> marts flow
 ```
 
 No processing buttons inside automated tabs.
@@ -336,7 +367,7 @@ Transformations
 Dimensional Model & Data Marts
 ```
 
-## 12. Data Marts ready state
+## 13. Data Marts ready state
 
 A dataset is ready for analysis only when:
 
@@ -352,7 +383,32 @@ marts registered as available source models
 
 Then Dashboard can use the dataset.
 
-## 13. Analysis execution
+## 14. Question suggestions
+
+Dataset-specific suggested questions are generated after Data Marts exist.
+
+Input:
+
+```text
+backend-known mart catalog
+available metrics
+available dimensions
+grain definitions
+known limitations
+```
+
+Provider route:
+
+```text
+GEMINI_MODEL_1 with key 1/2
+-> OpenAI
+-> GEMINI_MODEL_2 with key 1/2
+-> honest failure
+```
+
+Question suggestions are exposed as `question_suggestions`, not as part of semantic preparation.
+
+## 15. Analysis execution
 
 Analysis plans query Data Marts by default.
 
@@ -360,11 +416,11 @@ Flow:
 
 ```text
 validated analysis plan
-→ backend generates safe Snowflake SELECT
-→ Snowflake executes query
-→ result preview and output schema stored
-→ ChartSpec generated
-→ insight generated from result preview
+-> backend generates safe Snowflake SELECT
+-> Snowflake executes query
+-> result preview and output schema stored
+-> ChartSpec generated
+-> insight generated from result preview
 ```
 
 Most analysis questions should use existing marts, not create new dbt models.
@@ -372,12 +428,12 @@ Most analysis questions should use existing marts, not create new dbt models.
 Rules:
 
 ```text
-one-off chart query → Snowflake SELECT only
-reusable business logic → dbt model only if explicitly added to scope
-complex logic in MVP → avoid or return clear unsupported message
+one-off chart query -> Snowflake SELECT only
+reusable business logic -> dbt model only if explicitly added to scope
+complex logic in MVP -> avoid or return clear unsupported message
 ```
 
-## 14. Cleanup
+## 16. Cleanup
 
 Expired session cleanup should remove:
 
@@ -391,13 +447,14 @@ temporary files
 
 Production quota/abuse logs may remain for the quota window.
 
-## 15. Configuration and readiness
+## 17. Configuration and readiness
 
 Readiness should check:
 
 ```text
 S3 credentials/bucket access
 Snowflake connection and warehouse availability
+Snowflake stage access
 dbt project/profile readiness
 AI provider readiness where needed
 ```
@@ -406,6 +463,7 @@ Upload button specifically requires:
 
 ```text
 valid file
+storage quota available
 S3 ready
 Snowflake ready
 ```
@@ -425,3 +483,5 @@ dataset ready
 Snowflake ready
 AI provider path available for planning
 ```
+
+dbt runtime must use a Python version compatible with the configured dbt line. The live smoke path validated dbt 1.11 with a Python 3.11 runtime; Python versions that break dbt dependencies should return setup-required/failed, not fake dbt success.
