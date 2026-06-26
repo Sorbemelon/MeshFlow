@@ -2,7 +2,7 @@
 generated_by: scopian
 generator_schema: v0.2-B
 view: main
-generated_at: 2026-06-18T12:43:49+07:00
+generated_at: 2026-06-26T14:56:03+07:00
 non_canonical: true
 generated_mode: single
 canonical_inputs:
@@ -14,7 +14,7 @@ canonical_inputs:
 input_hashes:
   view: sha256:d8813ce52fd6
   sources: sha256:4a0593b28507
-  buffer: sha256:fbe41a37ce33
+  buffer: sha256:e5f7edf6e91a
   context: sha256:5ef45bc1a5d7
   registry: sha256:b41cce7544f0
 ---
@@ -31,7 +31,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - view: main
 - view_path: docs/scopian/views/main/VIEW.md
-- generated_at: 2026-06-18T12:43:49+07:00
+- generated_at: 2026-06-26T14:56:03+07:00
 
 ## Selected Sources
 
@@ -54,6 +54,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - 2026-06-16T03:36:40+07:00 DEC-20260616-0336-user-demo-limit-correction-AW5Q: Title: Align analysis-run limit with dashboard-card limit Decision: MeshFlow v2 now uses 8 successful analysis runs and 8 dashboard card ... (docs/scopian/views/main/buffer/decisions/DEC-20260616-0336-user-demo-limit-correction-AW5Q.md)
 - 2026-06-18T12:43:44+07:00 DEC-20260618-1243-user-revise-ai-provider-routing-and-m-3PZH: MeshFlow now uses two active Gemini API keys and two active Gemini models. GEMINI_API_KEY_3 and GEMINI_MODEL_3 are removed from the acti ... (docs/scopian/views/main/buffer/decisions/DEC-20260618-1243-user-revise-ai-provider-routing-and-m-3PZH.md)
+- 2026-06-26T14:55:53+07:00 DEC-20260626-1455-user-replace-count-based-upload-limit-P9QC: Title: Replace count-based upload limit with storage-based upload limit Decision: MeshFlow no longer shows or enforces a count-based upl ... (docs/scopian/views/main/buffer/decisions/DEC-20260626-1455-user-replace-count-based-upload-limit-P9QC.md)
 
 ## Scope Checklist
 
@@ -129,6 +130,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 | ITEM-allowed-with-limits-named-rules-6553be1c | allowed_with_limits | Named Rules | DESIGN.md#named-rules | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-neutral-shell-deep-0f172a-slate-ff139273 | allowed_with_limits | Neutral: **Shell Deep** (#0f172a / slate-900): The workspace shell and sidebar background; also the ink color on light surfaces.; **Shell** (#1e293b / slate ... | DESIGN.md#neutral | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-secondary-brand-cyan-38bdf8-and-5820d5e6 | allowed_with_limits | Secondary: **Brand Cyan** (#38bdf8) and **Brand Violet** (#7c3aed): The logo gradient (cyan→violet). Identity-only — the mark, the landing hero accent, deco ... | DESIGN.md#secondary | none | not_checked_in_generated_view |
+| ITEM-allowed-with-limits-title-replace-count-based-upload-c152529f | allowed_with_limits | Title: Replace count-based upload limit with storage-based upload limit Decision: MeshFlow no longer shows or enforces a count-based upl ... | docs/scopian/views/main/buffer/decisions/DEC-20260626-1455-user-replace-count-based-upload-limit-P9QC.md | approved_buffer | not_checked_in_generated_view |
 | ITEM-likely-out-of-scope-1-core-ai-principle-f131a579 | likely_out_of_scope | 1. Core AI principle | docs/scopian/sources/AI_WORKFLOW.md#1-core-ai-principle | none | not_checked_in_generated_view |
 | ITEM-likely-out-of-scope-1-core-rule-fa703ef6 | likely_out_of_scope | 1. Core rule | docs/scopian/sources/LEGACY_REFERENCE_RULES.md#1-core-rule | none | not_checked_in_generated_view |
 | ITEM-likely-out-of-scope-10-chartspec-generation-4e388dee | likely_out_of_scope | 10. ChartSpec generation | docs/scopian/sources/AI_WORKFLOW.md#10-chartspec-generation | none | not_checked_in_generated_view |
@@ -148,7 +150,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 ## Coverage Snapshot
 
 - likely_in_scope: 20
-- allowed_with_limits: 50
+- allowed_with_limits: 51
 - likely_out_of_scope: 11
 - decision_required: 2
 - conflict_detected: 2
@@ -164,15 +166,15 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 ## Changelog Snapshot
 
-- generated_refresh: 2026-06-18T12:43:49+07:00
+- generated_refresh: 2026-06-26T14:56:03+07:00
 - selected_sources: 14
-- approved_buffer_records: 2
+- approved_buffer_records: 3
 
 ## Freshness Metadata
 
 - view: sha256:d8813ce52fd6
 - sources: sha256:4a0593b28507
-- buffer: sha256:fbe41a37ce33
+- buffer: sha256:e5f7edf6e91a
 - context: sha256:5ef45bc1a5d7
 - registry: sha256:b41cce7544f0
 
