@@ -48,7 +48,6 @@ const ERROR_LABELS: Record<string, string> = {
   FILE_TOO_LARGE: "The selected file is larger than the demo file-size limit.",
   INVALID_FILE_TYPE: "Only .csv files are supported in the MVP.",
   INVALID_CSV_FORMAT: "The CSV structure is not valid for upload preflight.",
-  UPLOAD_LIMIT_REACHED: "This session has already used its uploaded CSV quota.",
   TOTAL_UPLOAD_LIMIT_REACHED: "This file would exceed the session upload-size quota.",
 };
 

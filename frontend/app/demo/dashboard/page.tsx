@@ -49,11 +49,13 @@ function formatDate(value: string | null): string {
 
 function PersistedDashboardCard({
   card,
+  editMode,
   isRemoving,
   onRemove,
   onViewEvidence,
 }: {
   card: DashboardCardSummary;
+  editMode: boolean;
   isRemoving: boolean;
   onRemove: () => void;
   onViewEvidence: () => void;
@@ -69,8 +71,8 @@ function PersistedDashboardCard({
   const datasetDeleted = card.source_dataset_deleted || snapshot.dataset.deleted === true;
 
   return (
-    <article className="rounded-lg border border-violet-200 bg-violet-50/35 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <article className="rounded-lg border border-violet-200 bg-violet-50/35 p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
             Saved Result Group
@@ -89,19 +91,21 @@ function PersistedDashboardCard({
           <button
             type="button"
             onClick={onViewEvidence}
-            className="cursor-pointer rounded-md border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-300 hover:bg-violet-50"
+            className="cursor-pointer rounded-md border border-violet-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-300 hover:bg-violet-50"
           >
             View Evidence
           </button>
-          <button
-            type="button"
-            disabled={isRemoving}
-            onClick={onRemove}
-            title="Remove this visible card. Public quota usage is not restored."
-            className="cursor-pointer rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isRemoving ? "Removing..." : "Remove"}
-          </button>
+          {editMode ? (
+            <button
+              type="button"
+              disabled={isRemoving}
+              onClick={onRemove}
+              title="Remove this visible card. Public quota usage is not restored."
+              className="cursor-pointer rounded-md border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 transition-colors hover:border-red-300 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isRemoving ? "Removing..." : "Remove"}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -135,7 +139,7 @@ function PersistedDashboardCard({
         </div>
       ) : null}
 
-      <div className="mt-4 grid gap-4">
+      <div className="mt-3 grid gap-3">
         {snapshot.charts.map((chart) => (
           <ChartCard
             key={chart.id}
@@ -174,6 +178,7 @@ export default function DashboardPage() {
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
   const [detailAnalysisId, setDetailAnalysisId] = useState<string | null>(null);
   const [removingCardId, setRemovingCardId] = useState<string | null>(null);
+  const [dashboardEditMode, setDashboardEditMode] = useState(false);
 
   const activeDatasetId = useMemo(() => {
     if (!readyDatasets.length) {
@@ -184,11 +189,6 @@ export default function DashboardPage() {
     }
     return readyDatasets[0].id;
   }, [readyDatasets, selectedDatasetId]);
-
-  const selectedDataset = useMemo(
-    () => readyDatasets.find((dataset) => dataset.id === activeDatasetId) ?? null,
-    [activeDatasetId, readyDatasets],
-  );
 
   const hasSchemaReviewDatasets = useMemo(
     () => schemaReviewDatasets.length > 0,
@@ -359,11 +359,6 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
-          {selectedDataset ? (
-            <p className="mt-2 rounded-md border border-violet-200 bg-violet-50/40 px-3 py-2 font-mono text-xs text-violet-900">
-              {selectedDataset.raw_table_name}
-            </p>
-          ) : null}
 
           <label className="mt-4 block text-xs font-semibold text-ink">Question</label>
           <textarea
@@ -454,27 +449,40 @@ export default function DashboardPage() {
                       {dashboardCards.length} visible card{dashboardCards.length === 1 ? "" : "s"}
                     </h2>
                   </div>
-                  <span className="rounded-full border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-700">
-                    Used {workspace?.dashboard.cards_used ?? 0} / {workspace?.dashboard.cards_limit ?? 8}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-violet-200 bg-white px-2.5 py-1 text-xs font-semibold text-violet-700">
+                      Used {workspace?.dashboard.cards_used ?? 0} / {workspace?.dashboard.cards_limit ?? 8}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setDashboardEditMode((current) => !current)}
+                      className="cursor-pointer rounded-md border border-violet-200 bg-white px-3 py-1.5 text-xs font-semibold text-violet-700 transition-colors hover:border-violet-300 hover:bg-violet-50"
+                    >
+                      {dashboardEditMode ? "Done" : "Edit"}
+                    </button>
+                  </div>
                 </div>
                 <p className="mt-2 text-sm text-violet-900">
                   Removing a visible card does not restore public demo quota.
+                  {dashboardEditMode ? " Edit mode is limited to visible-card removal in this phase." : ""}
                 </p>
               </div>
-              {dashboardCards.map((card) => (
-                <PersistedDashboardCard
-                  key={card.id}
-                  card={card}
-                  isRemoving={removingCardId === card.id}
-                  onRemove={() => void handleRemoveCard(card.id)}
-                  onViewEvidence={() => {
-                    if (card.analysis_run_id) {
-                      setDetailAnalysisId(card.analysis_run_id);
-                    }
-                  }}
-                />
-              ))}
+              <div className="grid gap-4 xl:grid-cols-2">
+                {dashboardCards.map((card) => (
+                  <PersistedDashboardCard
+                    key={card.id}
+                    card={card}
+                    editMode={dashboardEditMode}
+                    isRemoving={removingCardId === card.id}
+                    onRemove={() => void handleRemoveCard(card.id)}
+                    onViewEvidence={() => {
+                      if (card.analysis_run_id) {
+                        setDetailAnalysisId(card.analysis_run_id);
+                      }
+                    }}
+                  />
+                ))}
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-violet-200 bg-violet-50/30 px-6 py-16 text-center">

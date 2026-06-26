@@ -130,7 +130,6 @@ def test_limits_endpoint_returns_corrected_public_limits(client: TestClient) -> 
     assert body["usage"] is None
     assert limits["retention_days"] == 3
     assert limits["max_demo_datasets_per_session"] == 1
-    assert limits["max_uploaded_datasets_per_session"] == 1
     assert limits["max_upload_file_size_mb"] == 5
     assert limits["max_total_upload_size_mb"] == 10
     assert limits["max_successful_analysis_runs_per_session"] == 8

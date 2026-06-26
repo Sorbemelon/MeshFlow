@@ -39,9 +39,6 @@ class Settings(BaseSettings):
     max_demo_datasets_per_session: int = Field(
         default=1, alias="MAX_DEMO_DATASETS_PER_SESSION"
     )
-    max_uploaded_datasets_per_session: int = Field(
-        default=1, alias="MAX_UPLOADED_DATASETS_PER_SESSION"
-    )
     max_upload_file_size_mb: int = Field(default=5, alias="MAX_UPLOAD_FILE_SIZE_MB")
     max_total_upload_size_mb: int = Field(default=10, alias="MAX_TOTAL_UPLOAD_SIZE_MB")
     max_successful_analysis_runs_per_session: int = Field(

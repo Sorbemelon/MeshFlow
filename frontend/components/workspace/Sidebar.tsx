@@ -29,6 +29,14 @@ const ip = {
   "aria-hidden": true as const,
 };
 
+function formatMegabytes(value: number | null | undefined): string {
+  const numeric = Number(value ?? 0);
+  if (numeric === 0) {
+    return "0 MB";
+  }
+  return `${numeric < 1 ? numeric.toFixed(2) : numeric.toFixed(1)} MB`;
+}
+
 const NAV: NavItem[] = [
   {
     href: "/demo/upload",
@@ -115,11 +123,10 @@ export function Sidebar() {
       value: `${limits?.retention_days ?? 3} days`,
     },
     {
-      label: "CSV uploads",
-      value: `${usage?.uploaded_datasets_used ?? 0} / ${
-        limits?.max_uploaded_datasets_per_session ??
-        DEMO_LIMITS.uploadedCsvDatasetsPerSession
-      }`,
+      label: "Storage",
+      value: `${formatMegabytes(usage?.total_upload_mb_used)} / ${
+        limits?.max_total_upload_size_mb ?? DEMO_LIMITS.totalUploadSizeMb
+      } MB`,
     },
     {
       label: "Demo data",

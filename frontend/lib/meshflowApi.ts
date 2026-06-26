@@ -15,7 +15,6 @@ export type DemoSessionSummary = {
 export type DemoLimits = {
   retention_days: number;
   max_demo_datasets_per_session: number;
-  max_uploaded_datasets_per_session: number;
   max_upload_file_size_mb: number;
   max_total_upload_size_mb: number;
   max_successful_analysis_runs_per_session: number;
@@ -516,7 +515,7 @@ export type UploadFileValidation = {
 
 export type UploadQuotaSummary = {
   uploaded_datasets_used: number;
-  uploaded_datasets_limit: number;
+  uploaded_datasets_limit: number | null;
   total_upload_mb_used: number;
   total_upload_mb_limit: number;
   file_size_mb_limit: number;

@@ -41,7 +41,6 @@ def configured_limits(config: Settings = settings) -> DemoLimits:
     return DemoLimits(
         retention_days=config.demo_session_retention_days,
         max_demo_datasets_per_session=config.max_demo_datasets_per_session,
-        max_uploaded_datasets_per_session=config.max_uploaded_datasets_per_session,
         max_upload_file_size_mb=config.max_upload_file_size_mb,
         max_total_upload_size_mb=config.max_total_upload_size_mb,
         max_successful_analysis_runs_per_session=(

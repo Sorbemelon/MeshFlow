@@ -1,7 +1,6 @@
 export const DEMO_LIMITS = {
   sessionLifetime: "3 days",
   demoDatasetPerSession: 1,
-  uploadedCsvDatasetsPerSession: 1,
   fileSizeMb: 5,
   totalUploadSizeMb: 10,
   successfulAnalysisRunsPerSession: 8,
@@ -14,9 +13,8 @@ export const DEMO_LIMITS = {
 export const LANDING_DEMO_LIMIT_ITEMS = [
   { count: DEMO_LIMITS.sessionLifetime, label: "anonymous session" },
   { count: "1x", label: "demo dataset" },
-  { count: "1 CSV", label: "uploaded dataset" },
   { count: `${DEMO_LIMITS.fileSizeMb} MB`, label: "per file" },
-  { count: `${DEMO_LIMITS.totalUploadSizeMb} MB`, label: "per session" },
+  { count: `${DEMO_LIMITS.totalUploadSizeMb} MB`, label: "upload storage/session" },
   {
     count: `${DEMO_LIMITS.successfulAnalysisRunsPerSession}`,
     label: "successful analyses",
@@ -36,8 +34,8 @@ export const LANDING_DEMO_LIMIT_NOTE =
 
 export const SIDEBAR_DEMO_USAGE_ITEMS = [
   {
-    label: "CSV uploads",
-    value: `0 / ${DEMO_LIMITS.uploadedCsvDatasetsPerSession}`,
+    label: "Storage",
+    value: `0 MB / ${DEMO_LIMITS.totalUploadSizeMb} MB`,
   },
   {
     label: "Demo data",

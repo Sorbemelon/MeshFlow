@@ -191,23 +191,59 @@ def test_oversized_file_is_blocked(client: TestClient) -> None:
     assert "FILE_TOO_LARGE" in body["file"]["errors"]
 
 
-def test_upload_quota_already_used_is_blocked(
+def test_upload_count_does_not_block_when_storage_quota_remains(
     client: TestClient,
     db_session: Session,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr(
+        "app.services.upload_preflight_service.readiness_service.check_s3_readiness",
+        lambda _config: ready_check(),
+    )
+    monkeypatch.setattr(
+        "app.services.upload_preflight_service.readiness_service.check_snowflake_readiness",
+        lambda _config: ready_check(),
+    )
     session_id = create_session(client)
     session = db_session.get(DemoSession, session_id)
-    session.uploaded_datasets_used = 1
+    session.uploaded_datasets_used = 99
     db_session.commit()
 
     response = post_preflight(client, session_id, b"order_id,revenue\n1,10\n")
 
     assert response.status_code == 200
     body = response.json()
-    assert body["can_upload"] is False
-    assert "UPLOAD_LIMIT_REACHED" in body["quota"]["errors"]
+    assert body["can_upload"] is True
+    assert body["quota"]["errors"] == []
     db_session.expire_all()
-    assert db_session.get(DemoSession, session_id).uploaded_datasets_used == 1
+    assert db_session.get(DemoSession, session_id).uploaded_datasets_used == 99
+
+
+def test_total_storage_quota_blocks_upload_preflight(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.upload_preflight_service.readiness_service.check_s3_readiness",
+        lambda _config: ready_check(),
+    )
+    monkeypatch.setattr(
+        "app.services.upload_preflight_service.readiness_service.check_snowflake_readiness",
+        lambda _config: ready_check(),
+    )
+    session_id = create_session(client)
+    session = db_session.get(DemoSession, session_id)
+    session.total_upload_mb_used = 9.998
+    db_session.commit()
+
+    content = b"order_id,revenue\n" + (b"1,10\n" * 1000)
+    response = post_preflight(client, session_id, content)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["can_upload"] is False
+    assert "TOTAL_UPLOAD_LIMIT_REACHED" in body["quota"]["errors"]
 
 
 def test_readiness_failure_does_not_increment_usage(

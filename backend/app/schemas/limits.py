@@ -4,7 +4,6 @@ from pydantic import BaseModel
 class DemoLimits(BaseModel):
     retention_days: int
     max_demo_datasets_per_session: int
-    max_uploaded_datasets_per_session: int
     max_upload_file_size_mb: int
     max_total_upload_size_mb: int
     max_successful_analysis_runs_per_session: int

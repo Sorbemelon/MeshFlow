@@ -23,7 +23,7 @@ class UploadFileValidation(BaseModel):
 
 class UploadQuotaSummary(BaseModel):
     uploaded_datasets_used: int
-    uploaded_datasets_limit: int
+    uploaded_datasets_limit: int | None = None
     total_upload_mb_used: float
     total_upload_mb_limit: int
     file_size_mb_limit: int

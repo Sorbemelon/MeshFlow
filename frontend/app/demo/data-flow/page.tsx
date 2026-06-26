@@ -36,7 +36,9 @@ const TABS = [
   "Warehouse Raw",
   "Transformations",
   "Dimensional Model & Data Marts",
-];
+] as const;
+
+type DataFlowTab = (typeof TABS)[number];
 
 const SEMANTIC_ROLE_OPTIONS: SemanticRole[] = [
   "identifier",
@@ -54,6 +56,60 @@ type MappingDraft = {
 };
 
 type StageState = "Completed" | "Not Started" | "Waiting" | "Running" | "Failed";
+
+const RAW_RETAIL_DIMENSIONS = [
+  {
+    name: "dim_customer",
+    grain: "one row per customer",
+    keys: ["customer_id"],
+    dimensions: ["customer_name", "customer_segment"],
+  },
+  {
+    name: "dim_product",
+    grain: "one row per product",
+    keys: ["product_id"],
+    dimensions: ["product_name", "product_category"],
+  },
+  {
+    name: "dim_store",
+    grain: "one row per store",
+    keys: ["store_id"],
+    dimensions: ["store_name", "store_region"],
+  },
+  {
+    name: "dim_date",
+    grain: "one row per order date",
+    keys: ["order_date"],
+    dimensions: ["order_month"],
+  },
+];
+
+const RAW_RETAIL_MARTS = [
+  {
+    name: "mart_sales_performance",
+    grain: "month and product category",
+    metrics: ["total_revenue", "total_orders", "total_quantity", "gross_margin"],
+    dimensions: ["order_month", "product_category"],
+  },
+  {
+    name: "mart_product_performance",
+    grain: "product category and product",
+    metrics: ["total_revenue", "total_quantity", "gross_margin"],
+    dimensions: ["product_category", "product_name"],
+  },
+  {
+    name: "mart_customer_segments",
+    grain: "customer segment",
+    metrics: ["total_revenue", "total_orders", "average_order_value"],
+    dimensions: ["customer_segment"],
+  },
+  {
+    name: "mart_store_performance",
+    grain: "store region and store",
+    metrics: ["total_revenue", "total_orders"],
+    dimensions: ["store_region", "store_name"],
+  },
+];
 
 const ip = {
   width: 20,
@@ -125,6 +181,19 @@ function formatConfidence(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+function semanticConfidenceLabel(semanticColumn: SemanticColumnSummary | undefined): string {
+  if (!semanticColumn) {
+    return "Not AI-scored";
+  }
+  if (semanticColumn.user_edited) {
+    return "Manual";
+  }
+  if (!semanticColumn.provider_name || semanticColumn.confidence <= 0) {
+    return "Not AI-scored";
+  }
+  return formatConfidence(semanticColumn.confidence);
+}
+
 function buildMappingDrafts(detail: DatasetDetailResponse): Record<string, MappingDraft> {
   const semanticByProfile = new Map(
     detail.semantic_preparation.semantic_columns.map(
@@ -149,7 +218,7 @@ function buildMappingDrafts(detail: DatasetDetailResponse): Record<string, Mappi
   return drafts;
 }
 
-function dataFlowTabDescription(tab: string): string {
+function dataFlowTabDescription(tab: DataFlowTab): string {
   if (tab === "Warehouse Raw") {
     return "Warehouse Raw table and profiled columns from the live Snowflake load.";
   }
@@ -165,6 +234,29 @@ function dataFlowTabDescription(tab: string): string {
 
 function modelLayerLabel(layer: string): string {
   return layer.replaceAll("_", " ");
+}
+
+function hasModel(models: Record<string, string[]>, modelName: string): boolean {
+  return Object.values(models).some((names) => names.includes(modelName));
+}
+
+function InlineSpinner() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden
+      className="animate-spin"
+    >
+      <path d="M16 5.5A7 7 0 1 0 17 10" />
+      <path d="M16 3v3h-3" />
+    </svg>
+  );
 }
 
 function DataFlowContent() {
@@ -186,7 +278,7 @@ function DataFlowContent() {
   const [deletingDatasetId, setDeletingDatasetId] = useState<string | null>(null);
   const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
   const [mappingDrafts, setMappingDrafts] = useState<Record<string, MappingDraft>>({});
-  const [activeTab, setActiveTab] = useState(TABS[0]);
+  const [activeTab, setActiveTab] = useState<DataFlowTab>(TABS[0]);
   const queryDatasetId = searchParams.get("datasetId") ?? "";
   const selectedDatasetId = useMemo(() => {
     if (datasets.length === 0) {
@@ -214,17 +306,23 @@ function DataFlowContent() {
   const semanticPreparation = activeDatasetDetail?.semantic_preparation ?? null;
   const semanticStatus = semanticPreparation?.status ?? "not_started";
   const isReadyForAnalysis = selectedDataset?.status === "ready_for_analysis";
+  const mappingDraftsReady =
+    Boolean(activeDatasetDetail) &&
+    activeDatasetDetail?.schema_preview.columns.every((column) => {
+      const draft = mappingDrafts[column.id];
+      return Boolean(draft?.approved_name.trim());
+    });
   const semanticMappingsReady =
     (activeDatasetDetail?.semantic_preparation.semantic_columns.length ?? 0) > 0;
   const canGenerateSemantic =
     Boolean(activeDatasetDetail) &&
     semanticActionState === "idle" &&
     semanticStatus === "not_started";
-  const canRefreshSemantic =
+  const canSaveMappings =
     Boolean(activeDatasetDetail) &&
+    !isReadyForAnalysis &&
     semanticActionState === "idle" &&
-    semanticStatus === "completed";
-  const canSaveMappings = Boolean(activeDatasetDetail) && semanticActionState === "idle";
+    mappingDraftsReady;
   const canTransform =
     Boolean(activeDatasetDetail) &&
     semanticMappingsReady &&
@@ -240,6 +338,67 @@ function DataFlowContent() {
   }, [activeDatasetDetail?.semantic_preparation.semantic_columns]);
   const transformationModels = dataFlow?.models ?? {};
   const hasTransformationModels = Object.keys(transformationModels).length > 0;
+  const hasDimensionalEvidence = Boolean(
+    transformationModels.dimensional_model?.length ||
+      transformationModels.data_marts?.length ||
+      isReadyForAnalysis,
+  );
+  const isRawRetailDemo =
+    activeDatasetDetail?.dataset.name === "Raw Retail Transactions Demo" ||
+    activeDatasetDetail?.dataset.source_type === "demo_raw_retail";
+  const includedMappings = useMemo(
+    () =>
+      activeDatasetDetail?.schema_preview.columns
+        .map((column) => ({
+          raw: column.raw_column_name,
+          field: mappingDrafts[column.id]?.approved_name ?? column.normalized_column_name,
+          role: mappingDrafts[column.id]?.approved_role ?? "unknown",
+          include: mappingDrafts[column.id]?.include_in_model ?? true,
+        }))
+        .filter((mapping) => mapping.include) ?? [],
+    [activeDatasetDetail?.schema_preview.columns, mappingDrafts],
+  );
+  const tabAvailability = useMemo<Record<DataFlowTab, { enabled: boolean; reason: string }>>(
+    () => ({
+      "Schema Preview": {
+        enabled: hasDataset,
+        reason: "Available after a dataset is loaded.",
+      },
+      "Warehouse Raw": {
+        enabled: Boolean(activeDatasetDetail) && semanticMappingsReady,
+        reason: semanticMappingsReady
+          ? "Warehouse Raw is available after schema review is saved."
+          : "Save schema mappings before opening Warehouse Raw evidence.",
+      },
+      Transformations: {
+        enabled:
+          transformActionState === "running" ||
+          Boolean(dataFlow?.transformation) ||
+          hasTransformationModels ||
+          selectedDataset?.status === "transform_failed" ||
+          isReadyForAnalysis,
+        reason: "Available after a transform starts, completes, or fails.",
+      },
+      "Dimensional Model & Data Marts": {
+        enabled: hasDimensionalEvidence,
+        reason: "Available after dbt records Dimensional Model or Data Mart evidence.",
+      },
+    }),
+    [
+      activeDatasetDetail,
+      dataFlow?.transformation,
+      hasDataset,
+      hasDimensionalEvidence,
+      hasTransformationModels,
+      isReadyForAnalysis,
+      selectedDataset?.status,
+      semanticMappingsReady,
+      transformActionState,
+    ],
+  );
+  const visibleActiveTab: DataFlowTab = tabAvailability[activeTab].enabled
+    ? activeTab
+    : "Schema Preview";
 
   useEffect(() => {
     if (!sessionId || !selectedDatasetId) {
@@ -484,77 +643,87 @@ function DataFlowContent() {
             <h3 className="mb-2 text-xs font-semibold text-ink-muted">
               Dataset
             </h3>
-            <select
-              disabled={!hasDataset}
-              value={selectedDatasetId}
-              aria-label="Select dataset"
-              onChange={(event) => setManualDatasetId(event.target.value)}
-              className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-sm text-ink disabled:cursor-not-allowed disabled:bg-surface-muted disabled:text-ink-muted"
-            >
-              {!hasDataset ? <option value="">No available dataset</option> : null}
-              {datasets.map((dataset) => (
-                <option key={dataset.id} value={dataset.id}>
-                  {datasetLabel(dataset)}
-                </option>
-              ))}
-            </select>
-            {selectedDataset ? (
-              <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/50 px-3 py-2">
-                <p className="font-mono text-xs text-blue-900">
-                  {selectedDataset.raw_table_name}
-                </p>
-                <p className="mt-1 text-xs text-blue-800">
-                  {selectedDataset.row_count} rows, {selectedDataset.column_count} columns
-                </p>
-              </div>
-            ) : null}
-            {datasets.length > 0 ? (
-              <div className="mt-3 rounded-md border border-border bg-surface-muted px-3 py-2">
-                <p className="text-xs font-semibold text-ink-muted">
-                  Active datasets
-                </p>
-                <div className="mt-2 grid gap-1.5">
-                  {datasets.map((dataset) => (
-                    <div
-                      key={dataset.id}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-2"
-                    >
-                      <span className="truncate text-xs font-medium text-ink-soft">
-                        {datasetLabel(dataset)}
-                      </span>
-                      <button
-                        type="button"
-                        disabled={deletingDatasetId !== null}
-                        onClick={() => void handleDeleteDataset(dataset)}
-                        title="Remove dataset from the active workspace. Quota usage is not restored."
-                        className="cursor-pointer rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                        aria-label={`Remove ${datasetLabel(dataset)}`}
+            {hasDataset ? (
+              <details className="group rounded-md border border-border bg-surface">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-medium text-ink marker:hidden">
+                  <span className="truncate">
+                    {selectedDataset ? datasetLabel(selectedDataset) : "Select dataset"}
+                  </span>
+                  <svg
+                    width={16}
+                    height={16}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.8}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                    className="text-ink-muted transition-transform group-open:rotate-180"
+                  >
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </summary>
+                <div className="border-t border-border bg-surface-muted p-1.5">
+                  {datasets.map((dataset) => {
+                    const active = dataset.id === selectedDatasetId;
+                    return (
+                      <div
+                        key={dataset.id}
+                        className={cn(
+                          "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-md",
+                          active ? "bg-blue-50" : "bg-transparent",
+                        )}
                       >
-                        <svg
-                          width={15}
-                          height={15}
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth={1.9}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden
+                        <button
+                          type="button"
+                          onClick={() => setManualDatasetId(dataset.id)}
+                          className={cn(
+                            "min-w-0 cursor-pointer rounded-md px-2.5 py-2 text-left text-xs font-medium transition-colors hover:bg-surface",
+                            active ? "text-blue-800" : "text-ink-soft",
+                          )}
                         >
-                          <path d="M3 6h18" />
-                          <path d="M8 6V4h8v2" />
-                          <path d="M19 6l-1 14H6L5 6" />
-                          <path d="M10 11v5M14 11v5" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
+                          <span className="block truncate">{datasetLabel(dataset)}</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingDatasetId !== null}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            void handleDeleteDataset(dataset);
+                          }}
+                          title="Remove dataset from the active workspace. Quota usage is not restored."
+                          className="cursor-pointer rounded-md p-1.5 text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                          aria-label={`Remove ${datasetLabel(dataset)}`}
+                        >
+                          <svg
+                            width={15}
+                            height={15}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.9}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M8 6V4h8v2" />
+                            <path d="M19 6l-1 14H6L5 6" />
+                            <path d="M10 11v5M14 11v5" />
+                          </svg>
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-                <p className="mt-2 text-[0.6875rem] leading-relaxed text-ink-muted">
-                  Existing dashboard cards and history remain available from stored snapshots.
-                </p>
+              </details>
+            ) : (
+              <div className="rounded-md border border-border bg-surface-muted px-3 py-2.5 text-sm text-ink-muted">
+                No available dataset
               </div>
-            ) : null}
+            )}
             {deleteMessage ? (
               <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
                 {deleteMessage}
@@ -615,16 +784,23 @@ function DataFlowContent() {
             className="mb-4 flex flex-wrap gap-0 border-b border-border"
           >
             {TABS.map((tab) => {
-              const active = tab === activeTab;
+              const active = tab === visibleActiveTab;
+              const availability = tabAvailability[tab];
               return (
                 <button
                   key={tab}
                   type="button"
                   role="tab"
-                  disabled={!hasDataset}
+                  disabled={!availability.enabled}
                   aria-selected={active}
-                  onClick={() => setActiveTab(tab)}
-                  title={dataFlowTabDescription(tab)}
+                  onClick={() => {
+                    if (availability.enabled) {
+                      setActiveTab(tab);
+                    }
+                  }}
+                  title={
+                    availability.enabled ? dataFlowTabDescription(tab) : availability.reason
+                  }
                   className={cn(
                     "-mb-px border-b-2 px-3.5 py-2.5 text-sm font-medium transition-colors duration-150",
                     active
@@ -658,10 +834,10 @@ function DataFlowContent() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-base font-semibold text-ink">
-                    {activeTab}
+                    {visibleActiveTab}
                   </h2>
                   <p className="mt-1 text-sm text-ink-muted">
-                    {dataFlowTabDescription(activeTab)}
+                    {dataFlowTabDescription(visibleActiveTab)}
                   </p>
                 </div>
                 <StatusBadge
@@ -721,7 +897,7 @@ function DataFlowContent() {
                     </div>
                   </div>
 
-                  {activeTab === "Warehouse Raw" ? (
+                  {visibleActiveTab === "Warehouse Raw" ? (
                     <div className="mt-4 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="rounded-md border border-blue-100 bg-surface px-3 py-2">
@@ -749,7 +925,7 @@ function DataFlowContent() {
                               <th className="px-3 py-2">Raw column</th>
                               <th className="px-3 py-2">Snowflake column</th>
                               <th className="px-3 py-2">Detected type</th>
-                              <th className="px-3 py-2">Samples</th>
+                              <th className="px-3 py-2">Example values</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-border bg-surface">
@@ -777,11 +953,11 @@ function DataFlowContent() {
                     </div>
                   ) : null}
 
-                  {activeTab === "Transformations" ? (
+                  {visibleActiveTab === "Transformations" ? (
                     <div className="mt-4 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-ink">
-                          Staging and intermediate models
+                          Transformation evidence
                         </p>
                         {dataFlow?.transformation ? (
                           <StatusBadge
@@ -796,8 +972,66 @@ function DataFlowContent() {
                           />
                         ) : null}
                       </div>
-                      <div className="mt-3 grid gap-2 md:grid-cols-2">
-                        {["staging", "intermediate"].map((layer) => (
+                      <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
+                        <div className="rounded-md border border-blue-100 bg-surface px-3 py-2">
+                          <p className="text-xs font-semibold text-blue-700">
+                            Included raw columns
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {includedMappings.length ? (
+                              includedMappings.slice(0, 18).map((mapping) => (
+                                <span
+                                  key={`${mapping.raw}-${mapping.field}`}
+                                  className="rounded-full border border-slate-200 bg-surface-muted px-2 py-1 text-[0.6875rem] font-medium text-ink-soft"
+                                >
+                                  {mapping.raw} → {mapping.field}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-xs text-ink-muted">
+                                No included mappings saved yet.
+                              </span>
+                            )}
+                          </div>
+                          {includedMappings.length > 18 ? (
+                            <p className="mt-2 text-xs text-ink-muted">
+                              +{includedMappings.length - 18} more included columns.
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="rounded-md border border-blue-100 bg-surface px-3 py-2">
+                          <p className="text-xs font-semibold text-blue-700">
+                            Semantic roles used
+                          </p>
+                          <div className="mt-2 grid gap-1.5">
+                            {includedMappings.slice(0, 8).map((mapping) => (
+                              <div
+                                key={`${mapping.raw}-${mapping.role}`}
+                                className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 text-xs"
+                              >
+                                <span className="truncate font-mono text-ink-soft">
+                                  {mapping.field}
+                                </span>
+                                <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-semibold text-indigo-700">
+                                  {roleLabel(mapping.role)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 rounded-md border border-blue-100 bg-surface px-3 py-2">
+                        <p className="text-xs font-semibold text-blue-700">
+                          Source raw table
+                        </p>
+                        <p className="mt-1 break-all font-mono text-xs text-ink-soft">
+                          {activeDatasetDetail.dataset.raw_table_name}
+                        </p>
+                      </div>
+
+                      <div className="mt-3 grid gap-2 md:grid-cols-4">
+                        {["staging", "intermediate", "dimensional_model", "data_marts"].map((layer) => (
                           <div
                             key={layer}
                             className="rounded-md border border-blue-100 bg-surface px-3 py-2"
@@ -813,7 +1047,18 @@ function DataFlowContent() {
                           </div>
                         ))}
                       </div>
-                      <div className="mt-3 grid gap-2">
+                      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-blue-100 bg-surface px-3 py-2 text-xs text-ink-soft">
+                        <span className="font-medium">Raw selected columns</span>
+                        <span className="font-semibold text-blue-500">→</span>
+                        <span className="font-medium">Staging model</span>
+                        <span className="font-semibold text-blue-500">→</span>
+                        <span className="font-medium">Intermediate model</span>
+                        <span className="font-semibold text-blue-500">→</span>
+                        <span className="font-medium">Dimensional Model</span>
+                        <span className="font-semibold text-blue-500">→</span>
+                        <span className="font-medium">Data Marts</span>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
                         {dataFlow?.nodes.map((node) => (
                           <div
                             key={node.id}
@@ -831,35 +1076,125 @@ function DataFlowContent() {
                     </div>
                   ) : null}
 
-                  {activeTab === "Dimensional Model & Data Marts" ? (
+                  {visibleActiveTab === "Dimensional Model & Data Marts" ? (
                     <div className="mt-4 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-ink">
-                          Dimensional model and Data Marts
-                        </p>
+                        <div>
+                          <p className="text-sm font-semibold text-ink">
+                            Dimensional model and Data Marts
+                          </p>
+                          <p className="mt-1 text-xs text-ink-muted">
+                            Star-schema-style dimensional model recorded from the dbt run.
+                          </p>
+                        </div>
                         {isReadyForAnalysis ? (
                           <StatusBadge status="ready" label="Ready for analysis" />
                         ) : (
                           <StatusBadge status="waiting" label="Not ready" />
                         )}
                       </div>
-                      <div className="mt-3 grid gap-2 md:grid-cols-2">
-                        {["dimensional_model", "data_marts"].map((layer) => (
-                          <div
-                            key={layer}
-                            className="rounded-md border border-blue-100 bg-surface px-3 py-2"
-                          >
-                            <p className="text-xs font-semibold uppercase tracking-normal text-blue-700">
-                              {modelLayerLabel(layer)}
+
+                      {isRawRetailDemo ? (
+                        <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(220px,0.65fr)_minmax(0,1fr)]">
+                          <div className="grid gap-2">
+                            <p className="text-xs font-semibold text-blue-700">
+                              Dimensions
                             </p>
-                            <p className="mt-1 font-mono text-xs leading-relaxed text-ink-soft">
-                              {transformationModels[layer]?.length
-                                ? transformationModels[layer].join(", ")
-                                : "No models recorded yet"}
-                            </p>
+                            {RAW_RETAIL_DIMENSIONS.map((dimension) => (
+                              <div
+                                key={dimension.name}
+                                className={cn(
+                                  "rounded-md border px-3 py-2",
+                                  hasModel(transformationModels, dimension.name)
+                                    ? "border-blue-100 bg-surface"
+                                    : "border-slate-200 bg-surface-muted opacity-75",
+                                )}
+                              >
+                                <p className="font-mono text-xs font-semibold text-ink">
+                                  {dimension.name}
+                                </p>
+                                <p className="mt-1 text-xs text-ink-muted">
+                                  Grain: {dimension.grain}
+                                </p>
+                                <p className="mt-1 text-xs text-ink-muted">
+                                  Keys: {dimension.keys.join(", ")}
+                                </p>
+                                <p className="mt-1 text-xs text-ink-muted">
+                                  Columns: {dimension.dimensions.join(", ")}
+                                </p>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
+
+                          <div className="flex items-center">
+                            <div className="w-full rounded-md border border-indigo-200 bg-white px-4 py-4 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+                              <p className="text-xs font-semibold uppercase tracking-normal text-indigo-700">
+                                Fact table
+                              </p>
+                              <p className="mt-1 font-mono text-sm font-semibold text-ink">
+                                fact_sales
+                              </p>
+                              <p className="mt-2 text-xs text-ink-muted">
+                                Grain: one row per order line
+                              </p>
+                              <p className="mt-1 text-xs text-ink-muted">
+                                Keys: order_id, order_line_id, customer_id, product_id, store_id, order_date
+                              </p>
+                              <p className="mt-1 text-xs text-ink-muted">
+                                Metrics: quantity, revenue, cost, gross_margin
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid gap-2">
+                            <p className="text-xs font-semibold text-blue-700">
+                              Data Marts
+                            </p>
+                            {RAW_RETAIL_MARTS.map((mart) => (
+                              <div
+                                key={mart.name}
+                                className={cn(
+                                  "rounded-md border px-3 py-2",
+                                  hasModel(transformationModels, mart.name)
+                                    ? "border-blue-100 bg-surface"
+                                    : "border-slate-200 bg-surface-muted opacity-75",
+                                )}
+                              >
+                                <p className="font-mono text-xs font-semibold text-ink">
+                                  {mart.name}
+                                </p>
+                                <p className="mt-1 text-xs text-ink-muted">
+                                  Grain: {mart.grain}
+                                </p>
+                                <p className="mt-1 text-xs text-ink-muted">
+                                  Metrics: {mart.metrics.join(", ")}
+                                </p>
+                                <p className="mt-1 text-xs text-ink-muted">
+                                  Dimensions: {mart.dimensions.join(", ")}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-3 grid gap-2 md:grid-cols-2">
+                          {["dimensional_model", "data_marts"].map((layer) => (
+                            <div
+                              key={layer}
+                              className="rounded-md border border-blue-100 bg-surface px-3 py-2"
+                            >
+                              <p className="text-xs font-semibold uppercase tracking-normal text-blue-700">
+                                {modelLayerLabel(layer)}
+                              </p>
+                              <p className="mt-1 font-mono text-xs leading-relaxed text-ink-soft">
+                                {transformationModels[layer]?.length
+                                  ? transformationModels[layer].join(", ")
+                                  : "No models recorded yet"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {dataFlow?.artifacts.length ? (
                         <p className="mt-3 text-xs text-ink-muted">
                           {dataFlow.artifacts.length} redacted dbt artifacts are available in
@@ -869,7 +1204,7 @@ function DataFlowContent() {
                     </div>
                   ) : null}
 
-                  {semanticPreparation ? (
+                  {visibleActiveTab === "Schema Preview" && semanticPreparation ? (
                     <div
                       className={cn(
                         "mt-4 rounded-md border px-3 py-3",
@@ -927,6 +1262,12 @@ function DataFlowContent() {
                               Generate AI Suggestions
                             </Button>
                           ) : null}
+                          {semanticActionState === "generating" ? (
+                            <Button size="sm" disabled>
+                              <InlineSpinner />
+                              Generating AI Suggestions...
+                            </Button>
+                          ) : null}
                           {semanticStatus === "failed" && semanticActionState === "idle" ? (
                             <Button
                               size="sm"
@@ -935,16 +1276,6 @@ function DataFlowContent() {
                               title="Retry the provider ladder. No fallback suggestions are invented."
                             >
                               Retry
-                            </Button>
-                          ) : null}
-                          {canRefreshSemantic ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => void handleSemanticPreparation(true)}
-                              title="Refresh suggestions with the configured AI provider ladder."
-                            >
-                              Refresh AI Suggestions
                             </Button>
                           ) : null}
                         </div>
@@ -968,19 +1299,22 @@ function DataFlowContent() {
                     </div>
                   ) : null}
 
+                  {visibleActiveTab === "Schema Preview" ? (
+                    <>
                   <div className="mt-4 overflow-x-auto rounded-md border border-border">
                     <table className="min-w-[1180px] divide-y divide-border text-left text-sm">
                       <thead className="bg-surface-muted text-xs font-semibold text-ink-muted">
                         <tr>
-                          <th className="px-3 py-2">Raw column</th>
+                          <th className="px-3 py-2">Use in model</th>
+                          <th className="px-3 py-2">Source column</th>
                           <th className="px-3 py-2">Detected type</th>
                           <th className="px-3 py-2">Null rate</th>
                           <th className="px-3 py-2">Suggested name</th>
                           <th className="px-3 py-2">Semantic role</th>
                           <th className="px-3 py-2">Confidence</th>
                           <th className="px-3 py-2">Review</th>
-                          <th className="px-3 py-2">Approved mapping</th>
-                          <th className="px-3 py-2">Samples</th>
+                          <th className="px-3 py-2">Model field</th>
+                          <th className="px-3 py-2">Example values</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border bg-surface">
@@ -994,12 +1328,22 @@ function DataFlowContent() {
                                 semanticColumn?.needs_review ? "bg-amber-50/35" : "",
                               )}
                             >
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={draft?.include_in_model ?? true}
+                                  disabled={isReadyForAnalysis}
+                                  onChange={(event) =>
+                                    updateMappingDraft(column.id, {
+                                      include_in_model: event.target.checked,
+                                    })
+                                  }
+                                  aria-label={`Use ${column.raw_column_name} in model`}
+                                />
+                              </td>
                               <td className="px-3 py-2">
                                 <p className="font-mono text-xs text-ink">
                                   {column.raw_column_name}
-                                </p>
-                                <p className="mt-0.5 font-mono text-[0.6875rem] text-ink-muted">
-                                  {column.snowflake_column_name}
                                 </p>
                               </td>
                               <td className="px-3 py-2">
@@ -1036,13 +1380,13 @@ function DataFlowContent() {
                                 )}
                               </td>
                               <td className="px-3 py-2 font-mono text-xs text-ink-soft">
-                                {semanticColumn
-                                  ? formatConfidence(semanticColumn.confidence)
-                                  : "n/a"}
+                                {semanticConfidenceLabel(semanticColumn)}
                               </td>
                               <td className="px-3 py-2">
                                 {semanticColumn?.needs_review ? (
                                   <StatusBadge status="review" label="Needs review" />
+                                ) : semanticColumn?.user_edited ? (
+                                  <StatusBadge status="review" label="User edited" />
                                 ) : semanticColumn ? (
                                   <StatusBadge status="ready" label="Confident" />
                                 ) : (
@@ -1054,6 +1398,7 @@ function DataFlowContent() {
                                   <input
                                     value={draft?.approved_name ?? ""}
                                     aria-label={`Approved name for ${column.raw_column_name}`}
+                                    disabled={isReadyForAnalysis}
                                     onChange={(event) =>
                                       updateMappingDraft(column.id, {
                                         approved_name: event.target.value,
@@ -1065,6 +1410,7 @@ function DataFlowContent() {
                                     <select
                                       value={draft?.approved_role ?? "unknown"}
                                       aria-label={`Approved role for ${column.raw_column_name}`}
+                                      disabled={isReadyForAnalysis}
                                       onChange={(event) =>
                                         updateMappingDraft(column.id, {
                                           approved_role: event.target.value as SemanticRole,
@@ -1078,18 +1424,6 @@ function DataFlowContent() {
                                         </option>
                                       ))}
                                     </select>
-                                    <label className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
-                                      <input
-                                        type="checkbox"
-                                        checked={draft?.include_in_model ?? true}
-                                        onChange={(event) =>
-                                          updateMappingDraft(column.id, {
-                                            include_in_model: event.target.checked,
-                                          })
-                                        }
-                                      />
-                                      Include
-                                    </label>
                                   </div>
                                 </div>
                               </td>
@@ -1118,6 +1452,7 @@ function DataFlowContent() {
                         onClick={() => void handleSaveMappings()}
                         title="Save reviewed names and roles for dbt transformation."
                       >
+                        {semanticActionState === "saving" ? <InlineSpinner /> : null}
                         {semanticActionState === "saving" ? "Saving..." : "Save mappings"}
                       </Button>
                       {isReadyForAnalysis ? (
@@ -1135,6 +1470,7 @@ function DataFlowContent() {
                               : "Generate or save semantic mappings before running dbt."
                           }
                         >
+                          {transformActionState === "running" ? <InlineSpinner /> : null}
                           {transformActionState === "running" ? "Transforming..." : "Transform"}
                         </Button>
                       )}
@@ -1153,49 +1489,8 @@ function DataFlowContent() {
                       {transformMessage}
                     </div>
                   ) : null}
-
-                  {hasTransformationModels ? (
-                    <div className="mt-3 rounded-md border border-blue-200 bg-blue-50/35 px-3 py-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-ink">
-                          dbt transformation evidence
-                        </p>
-                        {dataFlow?.transformation ? (
-                          <StatusBadge
-                            status={
-                              dataFlow.transformation.status === "completed"
-                                ? "ready"
-                                : dataFlow.transformation.status === "failed"
-                                  ? "failed"
-                                  : "running"
-                            }
-                            label={dataFlow.transformation.status.replaceAll("_", " ")}
-                          />
-                        ) : null}
-                      </div>
-                      <div className="mt-3 grid gap-2 md:grid-cols-2">
-                        {Object.entries(transformationModels).map(([layer, models]) => (
-                          <div
-                            key={layer}
-                            className="rounded-md border border-blue-100 bg-surface px-3 py-2"
-                          >
-                            <p className="text-xs font-semibold uppercase tracking-normal text-blue-700">
-                              {modelLayerLabel(layer)}
-                            </p>
-                            <p className="mt-1 font-mono text-xs leading-relaxed text-ink-soft">
-                              {models.length ? models.join(", ") : "No models recorded"}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                      {(dataFlow?.artifacts.length ?? 0) > 0 ? (
-                        <p className="mt-3 text-xs text-ink-muted">
-                          {dataFlow?.artifacts.length} redacted dbt artifacts stored for review.
-                        </p>
-                      ) : null}
-                    </div>
+                    </>
                   ) : null}
-
                 </>
               ) : null}
             </div>

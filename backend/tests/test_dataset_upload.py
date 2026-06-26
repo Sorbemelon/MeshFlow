@@ -312,16 +312,24 @@ def test_preflight_still_does_not_increment_usage(
     assert session.total_upload_mb_used == 0
 
 
-def test_upload_quota_blocks_second_uploaded_csv(client: TestClient, monkeypatch) -> None:
+def test_multiple_uploaded_csvs_allowed_within_storage_limit(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
     patch_ready_dependencies(monkeypatch, rows_loaded=2)
     session_id = create_session(client)
     first_response = post_upload(client, session_id, CSV_CONTENT)
     assert first_response.status_code == 200
 
-    second_response = post_upload(client, session_id, CSV_CONTENT)
+    second_response = post_upload(client, session_id, CSV_CONTENT, file_name="sales_2.csv")
 
-    assert second_response.status_code == 400
-    assert second_response.json()["error_code"] == "UPLOAD_LIMIT_REACHED"
+    assert second_response.status_code == 200
+    db_session.expire_all()
+    assert len(db_session.scalars(select(Dataset)).all()) == 2
+    session = db_session.get(DemoSession, session_id)
+    assert session.uploaded_datasets_used == 2
+    assert session.total_upload_mb_used > 0
 
 
 def test_duplicate_normalized_headers_are_rejected_before_upload(

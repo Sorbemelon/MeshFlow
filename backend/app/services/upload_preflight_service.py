@@ -205,14 +205,11 @@ def _quota_summary(session: DemoSession, file_size_mb: float, config: Settings) 
     usage = usage_from_session(session)
     quota = UploadQuotaSummary(
         uploaded_datasets_used=usage.uploaded_datasets_used,
-        uploaded_datasets_limit=limits.max_uploaded_datasets_per_session,
+        uploaded_datasets_limit=None,
         total_upload_mb_used=usage.total_upload_mb_used,
         total_upload_mb_limit=limits.max_total_upload_size_mb,
         file_size_mb_limit=limits.max_upload_file_size_mb,
     )
-
-    if usage.uploaded_datasets_used >= limits.max_uploaded_datasets_per_session:
-        quota.errors.append("UPLOAD_LIMIT_REACHED")
 
     if usage.total_upload_mb_used + file_size_mb > limits.max_total_upload_size_mb:
         quota.errors.append("TOTAL_UPLOAD_LIMIT_REACHED")
