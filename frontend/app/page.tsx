@@ -183,7 +183,7 @@ const TECH = ["Next.js", "TypeScript", "FastAPI", "Snowflake", "dbt", "AWS S3", 
 export default function LandingPage() {
   return (
     <LandingSessionProvider>
-      <main className="min-h-screen bg-shell-deep lg:min-h-dvh">
+      <main className="min-h-screen bg-shell-deep lg:grid lg:h-dvh lg:grid-rows-[3rem_minmax(0,1fr)_auto_3rem] lg:overflow-hidden">
       <header className="flex h-12 items-center justify-between gap-4 border-b border-shell-border bg-linear-to-r from-shell-deep via-[#1e1b4b] to-shell-deep px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Logo variant="icon" size={30} priority />
@@ -200,9 +200,8 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <div className="relative lg:min-h-[calc(100dvh-96px)]">
-        <div className="grid lg:min-h-[calc(100dvh-96px)] lg:grid-cols-[60%_40%]">
-          <section className="flex items-center bg-shell-deep px-6 py-7 sm:px-10 lg:px-12 lg:py-5 lg:pb-56 xl:pb-52">
+        <div className="grid lg:min-h-0 lg:grid-cols-[60%_40%]">
+          <section className="flex items-center bg-shell-deep px-6 py-7 sm:px-10 lg:min-h-0 lg:px-12 lg:py-6">
             <div className="mx-auto w-full max-w-3xl">
               <div className="flex items-center justify-center gap-4 sm:gap-5">
                 <Logo
@@ -255,9 +254,9 @@ export default function LandingPage() {
             </div>
           </section>
 
-          <section className="flex items-center border-l border-indigo-200 bg-linear-to-br from-indigo-200 via-primary-tint to-violet-200 px-6 py-7 sm:px-10 lg:px-12 lg:py-5 lg:pb-56 xl:pb-52">
+          <section className="flex items-center bg-shell-deep px-6 py-7 sm:px-10 lg:min-h-0 lg:px-12 lg:py-6">
             <div className="mx-auto grid w-full max-w-3xl gap-4">
-              <div className="rounded-lg border border-blue-400/70 bg-blue-50/40 p-4">
+              <div className="rounded-lg border border-blue-400/70 bg-blue-50 p-4">
                 <div className="flex items-center gap-2 text-ink">
                   <span className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-100 text-blue-700">
                     <svg {...iconProps}>
@@ -291,7 +290,7 @@ export default function LandingPage() {
                 </ol>
               </div>
 
-              <div className="rounded-lg border border-indigo-400/70 bg-primary-tint/80 p-4">
+              <div className="rounded-lg border border-indigo-400/70 bg-primary-tint p-4">
                 <div className="flex items-center gap-2">
                   <span className="flex h-8 w-8 items-center justify-center rounded-md bg-white text-primary ring-1 ring-indigo-200">
                     <svg {...iconProps}>
@@ -325,26 +324,28 @@ export default function LandingPage() {
           </section>
         </div>
 
-        <section className="pointer-events-none relative z-10 mx-auto w-full px-6 pb-4 lg:absolute lg:bottom-0 lg:left-1/2 lg:-translate-x-1/2">
-          <div className="pointer-events-auto mx-auto w-full max-w-[92rem] rounded-lg border border-slate-400 bg-slate-100 p-4">
-            <div className="flex items-center justify-center gap-2.5 text-ink">
-              <svg {...iconProps} width={34} height={34} className="text-primary">
-                <path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z" />
-                <path d="m7 16.5-4.74-2.85" />
-                <path d="m7 16.5 5-3" />
-                <path d="M7 16.5v5.17" />
-                <path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z" />
-                <path d="m17 16.5-5-3" />
-                <path d="m17 16.5 4.74-2.85" />
-                <path d="M17 16.5v5.17" />
-                <path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z" />
-                <path d="M12 8 7.26 5.15" />
-                <path d="m12 8 4.74-2.85" />
-                <path d="M12 13.5V8" />
-              </svg>
-              <h2 className="text-lg font-semibold text-ink">
-                Architecture Overview
-              </h2>
+        <section className="relative bg-linear-to-r from-shell-deep via-[#1e1b4b] to-shell-deep px-6 py-4 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-linear-to-r before:from-transparent before:via-violet-200/75 before:to-transparent before:content-[''] sm:px-10 lg:px-12 lg:py-3">
+          <div className="mx-auto w-full max-w-[92rem]">
+            <div className="flex items-center justify-center text-center text-white">
+              <div className="flex items-center gap-2.5">
+                <svg {...iconProps} width={34} height={34} className="text-blue-300">
+                  <path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z" />
+                  <path d="m7 16.5-4.74-2.85" />
+                  <path d="m7 16.5 5-3" />
+                  <path d="M7 16.5v5.17" />
+                  <path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z" />
+                  <path d="m17 16.5-5-3" />
+                  <path d="m17 16.5 4.74-2.85" />
+                  <path d="M17 16.5v5.17" />
+                  <path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z" />
+                  <path d="M12 8 7.26 5.15" />
+                  <path d="m12 8 4.74-2.85" />
+                  <path d="M12 13.5V8" />
+                </svg>
+                <h2 className="text-lg font-semibold text-white">
+                  Architecture Overview
+                </h2>
+              </div>
             </div>
             <ol className="mt-3 grid auto-rows-fr items-stretch gap-2 md:grid-cols-3 xl:grid-cols-6 xl:gap-5">
               {ARCH.map((node, index) => (
@@ -353,9 +354,9 @@ export default function LandingPage() {
                   className="relative flex h-full min-w-0 flex-col items-center"
                 >
                   <article
-                    className={`mx-auto flex h-full w-full min-w-0 max-w-[13.5rem] flex-col rounded-md border ${node.borderClass} ${node.bgClass} px-3 py-2.5 text-center`}
+                    className={`mx-auto flex h-full w-full min-w-0 max-w-[13.5rem] flex-col rounded-md border ${node.borderClass} ${node.bgClass} px-2.5 py-2 text-center`}
                   >
-                    <div className="flex items-center justify-center gap-2">
+                    <div className="flex items-center justify-center gap-1.5">
                       <span
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/75 ${node.textClass} ring-1 ring-white/80`}
                       >
@@ -365,19 +366,19 @@ export default function LandingPage() {
                         {node.label}
                       </p>
                     </div>
-                    <p className="mt-2 text-[0.72rem] leading-snug text-ink-soft">
+                    <p className="mt-1 text-[0.72rem] leading-tight text-ink-soft">
                       {node.desc}
                     </p>
                   </article>
                   {index < ARCH.length - 1 ? (
-                    <span className="mt-2 flex h-5 items-center justify-center text-primary xl:absolute xl:-right-5 xl:top-1/2 xl:mt-0 xl:-translate-y-1/2" aria-hidden>
+                    <span className="mt-2 flex h-6 items-center justify-center text-violet-200 xl:absolute xl:-right-5 xl:top-1/2 xl:mt-0 xl:-translate-y-1/2" aria-hidden>
                       <svg
-                        width={18}
-                        height={18}
+                        width={22}
+                        height={22}
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
-                        strokeWidth={1.8}
+                        strokeWidth={2.6}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         className="rotate-90 xl:rotate-0"
@@ -390,9 +391,12 @@ export default function LandingPage() {
                 </li>
               ))}
             </ol>
+            <p className="mx-auto mt-3 max-w-3xl text-center text-sm leading-relaxed text-slate-300">
+              The demo path stays visible from raw input through warehouse, dbt,
+              AI planning, and dashboard evidence.
+            </p>
           </div>
         </section>
-      </div>
 
       <footer className="border-t border-shell-border bg-linear-to-r from-shell-deep via-[#1e1b4b] to-shell-deep px-6 py-2.5 lg:h-12">
         <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
