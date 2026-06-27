@@ -32,6 +32,7 @@ from app.services.dbt_transformation_service import (
 from app.services.semantic_preparation_service import (
     get_semantic_preparation,
     run_semantic_preparation,
+    start_semantic_preparation,
     update_semantic_column_mappings,
 )
 from app.services.upload_preflight_service import run_upload_preflight
@@ -90,6 +91,13 @@ def run_dataset_semantic_preparation(
     demo_session_id: str | None = Header(default=None, alias=DEMO_SESSION_HEADER),
     db: Session = Depends(get_db),
 ) -> SemanticPreparationResponse:
+    if request is None or request.async_run:
+        return start_semantic_preparation(
+            db,
+            demo_session_id,
+            dataset_id,
+            force=request.force if request else False,
+        )
     return run_semantic_preparation(
         db,
         demo_session_id,

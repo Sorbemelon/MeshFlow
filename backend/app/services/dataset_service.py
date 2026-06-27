@@ -432,15 +432,6 @@ def create_raw_retail_demo_dataset(
         )
 
     limits = configured_limits(config)
-    if session.demo_dataset_used >= limits.max_demo_datasets_per_session:
-        raise AppError(
-            error_code="DEMO_DATASET_ALREADY_ADDED",
-            failed_step="demo_dataset_quota",
-            message="The Raw Retail Transactions Demo has already been used in this session.",
-            next_action="Open Data Flow for the existing dataset or start a new demo session.",
-            status_code=status.HTTP_409_CONFLICT,
-        )
-
     try:
         content = RAW_RETAIL_DEMO_FIXTURE_PATH.read_bytes()
     except OSError as exc:
@@ -466,8 +457,6 @@ def create_raw_retail_demo_dataset(
         storage_group="raw-demo",
         config=config,
     )
-
-    session.demo_dataset_used += 1
 
     db.commit()
     db.refresh(dataset)

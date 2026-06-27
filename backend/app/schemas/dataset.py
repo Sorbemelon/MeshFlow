@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -106,6 +106,7 @@ class SemanticPreparationResponse(BaseModel):
     semantic_columns: list[SemanticColumnSummary]
     provider_runs: list[ProviderRunSummary]
     next_action: str | None = None
+    job_id: str | None = None
 
 
 class QuestionSuggestionsResponse(BaseModel):
@@ -154,6 +155,45 @@ class DbtArtifactSummary(BaseModel):
     created_at: str
 
 
+class FactModelMetadata(BaseModel):
+    name: str
+    grain: str
+    keys: list[str]
+    metrics: list[str]
+    date_columns: list[str] = Field(default_factory=list)
+    degenerate_dimensions: list[str] = Field(default_factory=list)
+
+
+class DimensionModelMetadata(BaseModel):
+    name: str
+    grain: str
+    key_column: str
+    columns: list[str]
+
+
+class MartModelMetadata(BaseModel):
+    name: str
+    grain: str
+    dimensions: list[str]
+    metrics: list[str]
+    related_dimensions: list[str] = Field(default_factory=list)
+
+
+class ModelRelationshipMetadata(BaseModel):
+    from_model: str
+    to_model: str
+    relationship_type: str
+    join_fields: list[str] = Field(default_factory=list)
+
+
+class DatasetModelMetadata(BaseModel):
+    generated_from: Literal["raw_retail_contract", "modeling_proposal"]
+    fact: FactModelMetadata
+    dimensions: list[DimensionModelMetadata]
+    marts: list[MartModelMetadata]
+    relationships: list[ModelRelationshipMetadata] = Field(default_factory=list)
+
+
 class DatasetTransformationRunSummary(BaseModel):
     id: str
     status: TransformationStatus
@@ -184,6 +224,17 @@ class DataFlowEdgeSummary(BaseModel):
     metadata: dict[str, object] | None = None
 
 
+RawPreviewStatus = Literal["completed", "not_configured", "failed"]
+
+
+class RawTablePreviewResponse(BaseModel):
+    status: RawPreviewStatus
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    row_count_previewed: int
+    message: str | None = None
+
+
 class DatasetDataFlowResponse(BaseModel):
     dataset: DatasetSummary
     transformation: DatasetTransformationRunSummary | None = None
@@ -191,6 +242,8 @@ class DatasetDataFlowResponse(BaseModel):
     edges: list[DataFlowEdgeSummary]
     artifacts: list[DbtArtifactSummary]
     models: dict[str, list[str]]
+    model_metadata: DatasetModelMetadata | None = None
+    raw_preview: RawTablePreviewResponse
     question_suggestions: QuestionSuggestionsResponse
 
 
@@ -204,6 +257,7 @@ class DatasetTransformResponse(BaseModel):
     transformation_run: DatasetTransformationRunSummary
     layers_completed: list[str]
     models: dict[str, list[str]]
+    model_metadata: DatasetModelMetadata | None = None
     next_route: str
 
 
@@ -230,6 +284,7 @@ class DatasetUploadResponse(BaseModel):
 
 class SemanticPreparationRunRequest(BaseModel):
     force: bool = False
+    async_run: bool = True
 
 
 class SemanticColumnMappingUpdate(BaseModel):

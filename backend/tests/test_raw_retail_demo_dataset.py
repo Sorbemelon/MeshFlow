@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.models.dataset import ColumnProfile, Dataset, DatasetFile
 from app.models.demo_session import DemoSession
 from app.schemas.upload_preflight import ReadinessCheck
-from app.services import snowflake_service, storage_service
+from app.services import dbt_transformation_service, snowflake_service, storage_service
 from app.services.dataset_service import (
     RAW_RETAIL_DEMO_FILE_NAME,
     RAW_RETAIL_DEMO_FIXTURE_PATH,
@@ -150,7 +150,7 @@ def test_demo_creation_blocks_when_snowflake_not_configured(
     assert db_session.get(DemoSession, session_id).demo_dataset_used == 0
 
 
-def test_demo_creation_success_creates_dataset_file_profile_and_demo_usage(
+def test_demo_creation_success_creates_dataset_file_profile_without_demo_quota_usage(
     client: TestClient,
     db_session: Session,
     monkeypatch,
@@ -196,7 +196,7 @@ def test_demo_creation_success_creates_dataset_file_profile_and_demo_usage(
     profiles = db_session.scalars(select(ColumnProfile)).all()
     assert len(profiles) == len(EXPECTED_RAW_RETAIL_COLUMNS)
     session = db_session.get(DemoSession, session_id)
-    assert session.demo_dataset_used == 1
+    assert session.demo_dataset_used == 0
     assert session.uploaded_datasets_used == 0
     assert session.successful_uploads_used == 0
     assert session.total_upload_mb_used == 0
@@ -229,7 +229,7 @@ def test_demo_creation_updates_workspace_and_limits(
     assert workspace["history"]["analysis_runs"] == []
     assert limits_response.status_code == 200
     usage = limits_response.json()["usage"]
-    assert usage["demo_dataset_used"] == 1
+    assert "demo_dataset_used" not in usage
     assert usage["uploaded_datasets_used"] == 0
 
 
@@ -254,7 +254,124 @@ def test_demo_creation_twice_returns_existing_without_duplicate_usage(
     )
     db_session.expire_all()
     assert len(db_session.scalars(select(Dataset)).all()) == 1
-    assert db_session.get(DemoSession, session_id).demo_dataset_used == 1
+    assert db_session.get(DemoSession, session_id).demo_dataset_used == 0
+
+
+def test_demo_creation_can_recreate_after_delete(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        storage_service,
+        "delete_s3_object_for_cleanup",
+        lambda **_kwargs: storage_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        snowflake_service,
+        "drop_raw_table_for_cleanup",
+        lambda **_kwargs: snowflake_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        dbt_transformation_service,
+        "cleanup_dataset_runtime_artifacts",
+        lambda **_kwargs: dbt_transformation_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        dbt_transformation_service,
+        "cleanup_dataset_model_tables",
+        lambda **_kwargs: dbt_transformation_service.CleanupOperationResult(status="completed"),
+    )
+    patch_ready_dependencies(monkeypatch)
+    session_id = create_session(client)
+    first_response = post_demo(client, session_id)
+    first_dataset_id = first_response.json()["dataset"]["id"]
+
+    delete_response = client.delete(
+        f"/api/v1/datasets/{first_dataset_id}",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+    second_response = post_demo(client, session_id)
+
+    assert delete_response.status_code == 200
+    assert delete_response.json()["status"] == "deleted"
+    assert second_response.status_code == 200
+    assert second_response.json()["status"] == "uploaded"
+    second_dataset_id = second_response.json()["dataset"]["id"]
+    assert second_dataset_id != first_dataset_id
+    db_session.expire_all()
+    all_datasets = db_session.scalars(
+        select(Dataset).order_by(Dataset.created_at.asc())
+    ).all()
+    assert [dataset.id for dataset in all_datasets] == [
+        first_dataset_id,
+        second_dataset_id,
+    ]
+    assert all_datasets[0].status == "deleted"
+    assert all_datasets[0].deleted_at is not None
+    assert all_datasets[1].deleted_at is None
+    assert db_session.get(DemoSession, session_id).demo_dataset_used == 0
+
+
+def test_reset_clears_active_demo_dataset_and_allows_recreate(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        storage_service,
+        "delete_s3_object_for_cleanup",
+        lambda **_kwargs: storage_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        snowflake_service,
+        "drop_raw_table_for_cleanup",
+        lambda **_kwargs: snowflake_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        dbt_transformation_service,
+        "cleanup_dataset_runtime_artifacts",
+        lambda **_kwargs: dbt_transformation_service.CleanupOperationResult(status="completed"),
+    )
+    monkeypatch.setattr(
+        dbt_transformation_service,
+        "cleanup_dataset_model_tables",
+        lambda **_kwargs: dbt_transformation_service.CleanupOperationResult(status="completed"),
+    )
+    patch_ready_dependencies(monkeypatch)
+    session_id = create_session(client)
+    first_response = post_demo(client, session_id)
+    first_dataset_id = first_response.json()["dataset"]["id"]
+
+    reset_response = client.post(
+        "/api/v1/demo-sessions/reset",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+    workspace_response = client.get(
+        "/api/v1/workspace",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+    second_response = post_demo(client, session_id)
+
+    assert reset_response.status_code == 200
+    assert reset_response.json()["workspace_cleared"] is True
+    assert workspace_response.status_code == 200
+    assert workspace_response.json()["datasets"] == []
+    assert workspace_response.json()["ready_datasets"] == []
+    assert second_response.status_code == 200
+    assert second_response.json()["status"] == "uploaded"
+    second_dataset_id = second_response.json()["dataset"]["id"]
+    assert second_dataset_id != first_dataset_id
+    db_session.expire_all()
+    first_dataset = db_session.get(Dataset, first_dataset_id)
+    second_dataset = db_session.get(Dataset, second_dataset_id)
+    assert first_dataset is not None
+    assert first_dataset.status == "deleted"
+    assert first_dataset.deleted_at is not None
+    assert second_dataset is not None
+    assert second_dataset.deleted_at is None
+    assert second_dataset.source_type == RAW_RETAIL_DEMO_SOURCE_TYPE
+    assert db_session.get(DemoSession, session_id).demo_dataset_used == 0
 
 
 def test_failed_demo_s3_upload_does_not_create_dataset_or_increment_usage(
