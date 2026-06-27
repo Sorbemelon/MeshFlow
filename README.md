@@ -188,6 +188,19 @@ Planned deployment:
 
 Hosted URLs will be added only after deployment is complete and verified.
 
+Vercel frontend settings:
+
+| Setting | Value |
+|---|---|
+| Root directory | `frontend` |
+| Framework preset | Next.js |
+| Install command | `npm install` |
+| Build command | `npm run build` |
+| Output directory | Vercel default for Next.js |
+| Environment variable | `NEXT_PUBLIC_API_BASE_URL=https://<render-backend-url>/api/v1` |
+
+The deployed Render backend must include the final Vercel origin in `BACKEND_CORS_ORIGINS`. The frontend does not need backend secrets; only `NEXT_PUBLIC_API_BASE_URL` is exposed to the browser.
+
 Render backend settings:
 
 | Setting | Value |
