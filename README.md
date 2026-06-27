@@ -214,7 +214,7 @@ Render backend settings:
 | Health check path | `/health` |
 | Migration command | `python -m alembic upgrade head` |
 
-Run the Alembic migration after setting `DATABASE_URL` to the Supabase PostgreSQL connection string. Do not run migrations from app startup unless that deployment behavior is explicitly added later.
+Run the Alembic migration after setting `DATABASE_URL` to the Supabase PostgreSQL connection string. Plain `postgresql://` URLs are accepted and normalized by the backend config to the installed `psycopg` SQLAlchemy driver. Choose the Supabase direct connection or pooler URL deliberately for the Render service; do not put `DATABASE_URL` in frontend/Vercel environment variables. Do not run migrations from app startup unless that deployment behavior is explicitly added later.
 
 Render environment variables should be configured in the Render dashboard, not committed. At minimum, set `DATABASE_URL`, `BACKEND_CORS_ORIGINS` with the deployed Vercel origin such as `https://<your-vercel-project>.vercel.app`, the demo quota settings, AWS S3 settings, Snowflake settings, dbt settings, and Gemini/OpenAI provider settings from `backend/.env.example`.
 
