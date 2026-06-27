@@ -2,7 +2,7 @@
 generated_by: scopian
 generator_schema: v0.2-B
 view: main
-generated_at: 2026-06-27T19:30:37+07:00
+generated_at: 2026-06-27T21:48:34+07:00
 non_canonical: true
 generated_mode: single
 canonical_inputs:
@@ -14,7 +14,7 @@ canonical_inputs:
 input_hashes:
   view: sha256:d8813ce52fd6
   sources: sha256:511e76b19a8e
-  buffer: sha256:2e357258cf49
+  buffer: sha256:8f056210910c
   context: sha256:5ef45bc1a5d7
   registry: sha256:4333ca27eae9
 ---
@@ -31,7 +31,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - view: main
 - view_path: docs/scopian/views/main/VIEW.md
-- generated_at: 2026-06-27T19:30:37+07:00
+- generated_at: 2026-06-27T21:48:34+07:00
 
 ## Selected Sources
 
@@ -57,6 +57,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 - 2026-06-26T14:55:53+07:00 DEC-20260626-1455-user-replace-count-based-upload-limit-P9QC: Title: Replace count-based upload limit with storage-based upload limit Decision: MeshFlow no longer shows or enforces a count-based upl ... (docs/scopian/views/main/buffer/decisions/DEC-20260626-1455-user-replace-count-based-upload-limit-P9QC.md)
 - 2026-06-27T05:25:34+07:00 DEC-20260627-0525-user-remove-demo-dataset-upload-count-NXJ5: Raw Retail demo dataset is no longer limited by a per-session demo dataset quota. MeshFlow still prevents duplicate active Raw Retail de ... (docs/scopian/views/main/buffer/decisions/DEC-20260627-0525-user-remove-demo-dataset-upload-count-NXJ5.md)
 - 2026-06-27T19:30:30+07:00 DEC-20260627-1930-user-post-refinement-workflow-and-das-E5MX: Post-refinement behavior remains within the current MeshFlow v2 demo scope: semantic preparation may run as an asynchronous backend job ... (docs/scopian/views/main/buffer/decisions/DEC-20260627-1930-user-post-refinement-workflow-and-das-E5MX.md)
+- 2026-06-27T21:48:27+07:00 DEC-20260627-2148-user-public-reset-demo-always-preserv-C36N: Public Reset Demo always preserves quota usage. The user-facing Reset Demo flow clears workspace data but never restores quota usage, in ... (docs/scopian/views/main/buffer/decisions/DEC-20260627-2148-user-public-reset-demo-always-preserv-C36N.md)
 
 ## Scope Checklist
 
@@ -80,6 +81,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 | ITEM-likely-in-scope-buttons-shape-gently-rounded-8px-7a62b756 | likely_in_scope | Buttons: **Shape:** Gently rounded (8px, `{rounded.md}`).; **Primary:** Indigo Intent (#4f46e5) fill, white text, 10px 18px padding. The single primary acti ... | DESIGN.md#buttons | none | not_checked_in_generated_view |
 | ITEM-likely-in-scope-meshflow-v2-data-model-b22641a9 | likely_in_scope | MeshFlow v2 Data Model | docs/scopian/sources/DATA_MODEL.md#meshflow-v2-data-model | none | not_checked_in_generated_view |
 | ITEM-likely-in-scope-post-api-v1-analysis-runs-090ea98a | likely_in_scope | POST /api/v1/analysis-runs | docs/scopian/sources/API_CONTRACT.md#post-api-v1-analysis-runs | none | not_checked_in_generated_view |
+| ITEM-likely-in-scope-public-reset-demo-always-preserv-9fcb96f0 | likely_in_scope | Public Reset Demo always preserves quota usage. The user-facing Reset Demo flow clears workspace data but never restores quota usage, in ... | docs/scopian/views/main/buffer/decisions/DEC-20260627-2148-user-public-reset-demo-always-preserv-C36N.md | approved_buffer | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-1-operating-loop-15904d1b | allowed_with_limits | 1. Operating loop | docs/scopian/sources/BUILD_PHASES.md#1-operating-loop | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-1-overview-dark-slate-console-sh-7df4b7d0 | allowed_with_limits | 1. Overview: Dark slate console shell; bright white/`slate-50` content surfaces.; Indigo as the one accent of intent; a functional status palette for everyt ... | DESIGN.md#1-overview | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-10-phase-7-analysis-workflow-76f42d29 | allowed_with_limits | 10. Phase 7 — Analysis workflow | docs/scopian/sources/BUILD_PHASES.md#10-phase-7-analysis-workflow | none | not_checked_in_generated_view |
@@ -165,7 +167,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 ## Coverage Snapshot
 
-- likely_in_scope: 18
+- likely_in_scope: 19
 - allowed_with_limits: 60
 - likely_out_of_scope: 16
 - decision_required: 2
@@ -182,15 +184,15 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 ## Changelog Snapshot
 
-- generated_refresh: 2026-06-27T19:30:37+07:00
+- generated_refresh: 2026-06-27T21:48:34+07:00
 - selected_sources: 14
-- approved_buffer_records: 5
+- approved_buffer_records: 6
 
 ## Freshness Metadata
 
 - view: sha256:d8813ce52fd6
 - sources: sha256:511e76b19a8e
-- buffer: sha256:2e357258cf49
+- buffer: sha256:8f056210910c
 - context: sha256:5ef45bc1a5d7
 - registry: sha256:4333ca27eae9
 
