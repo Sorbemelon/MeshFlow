@@ -157,8 +157,13 @@ def test_reset_does_not_reset_usage_by_default(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["status"] == "reset"
     assert body["usage_reset"] is False
+    assert body["quota_restored"] is False
+    assert body["workspace_cleared"] is True
     assert body["session"]["status"] == "active"
+    assert body["message"] == "Workspace was reset. Public demo quota usage was preserved."
+    assert body["next_action"] == "Launch a new workspace flow."
     assert body["usage"]["successful_analysis_runs_used"] == 4
     assert body["usage"]["dashboard_cards_used"] == 4
 
@@ -192,6 +197,7 @@ def test_reset_never_restores_usage(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["status"] == "reset"
     assert body["usage_reset"] is False
     assert body["quota_restored"] is False
     assert body["session"]["status"] == "active"

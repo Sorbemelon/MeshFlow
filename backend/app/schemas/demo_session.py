@@ -25,6 +25,7 @@ class DemoSessionResponse(BaseModel):
 
 
 class DemoSessionResetResponse(BaseModel):
+    status: Literal["reset"] = "reset"
     session: DemoSessionSummary
     limits: DemoLimits
     usage: DemoUsage
@@ -33,3 +34,4 @@ class DemoSessionResetResponse(BaseModel):
     quota_restored: bool = False
     cleanup: CleanupSummary
     message: str
+    next_action: str

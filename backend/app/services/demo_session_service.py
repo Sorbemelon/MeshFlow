@@ -259,9 +259,10 @@ def reset_demo_session(
     db.commit()
     db.refresh(session)
 
-    message = "Demo workspace metadata reset. Usage counters were not reset."
+    message = "Workspace was reset. Public demo quota usage was preserved."
 
     return DemoSessionResetResponse(
+        status="reset",
         session=summary_from_session(session, config),
         limits=configured_limits(config),
         usage=usage_from_session(session),
@@ -270,6 +271,7 @@ def reset_demo_session(
         quota_restored=usage_reset,
         cleanup=cleanup,
         message=message,
+        next_action="Launch a new workspace flow.",
     )
 
 

@@ -47,11 +47,13 @@ export type CleanupSummary = {
 };
 
 export type DemoSessionResetResponse = DemoSessionResponse & {
+  status: "reset";
   usage_reset: boolean;
   workspace_cleared: boolean;
   quota_restored: boolean;
   cleanup: CleanupSummary;
   message: string;
+  next_action: string;
 };
 
 export type DashboardCardSnapshot = {
