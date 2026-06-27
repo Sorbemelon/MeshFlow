@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import json
+import hashlib
 import re
 import shutil
 import subprocess
@@ -9,6 +10,7 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Callable
 
 from fastapi import status
 from sqlalchemy import select
@@ -32,6 +34,7 @@ from app.schemas.dataset import (
     DatasetTransformResponse,
     DatasetTransformationRunSummary,
     DbtArtifactSummary,
+    RawTablePreviewResponse,
 )
 from app.schemas.upload_preflight import ReadinessCheck
 from app.services import readiness_service, snowflake_service
@@ -52,6 +55,12 @@ from app.services.question_suggestion_summary_service import (
 
 SAFE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 TRANSFORMATION_LAYERS = ["staging", "intermediate", "dimensional_model", "data_marts"]
+DBT_LAYER_RUN_SPECS = [
+    ("staging", "staging", "models/staging"),
+    ("intermediate", "intermediate", "models/intermediate"),
+    ("dimensional_model", "dimensional_model", "models/dimensional"),
+    ("data_marts", "data_mart", "models/marts"),
+]
 PREP_NODE_SPECS = [
     ("raw_input", "Raw Input"),
     ("warehouse_raw", "Warehouse Raw"),
@@ -77,15 +86,9 @@ RAW_RETAIL_MODELS = {
         "mart_store_performance",
     ],
 }
-GENERIC_UPLOADED_MODELS = {
-    "staging": ["stg_uploaded"],
-    "intermediate": ["int_uploaded_enriched"],
-    "dimensional_model": ["fact_uploaded_records"],
-    "data_marts": ["mart_uploaded_overview"],
-}
 KNOWN_DBT_MODEL_TABLES = {
     model_name
-    for model_group in [*RAW_RETAIL_MODELS.values(), *GENERIC_UPLOADED_MODELS.values()]
+    for model_group in RAW_RETAIL_MODELS.values()
     for model_name in model_group
 }
 GENERATED_MODEL_PREFIXES = ("stg_", "int_", "fact_", "dim_", "mart_")
@@ -124,6 +127,7 @@ class GeneratedDbtProject:
     artifacts: list[tuple[str, str, str, str, Path | None]]
     modeling_proposal: dict[str, object] | None = None
     analysis_catalog: dict[str, dict[str, object]] | None = None
+    model_metadata: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -422,6 +426,7 @@ def run_dbt_commands(
     profiles_dir: Path,
     target_name: str,
     config: Settings = settings,
+    on_layer_status: Callable[[str, str], None] | None = None,
 ) -> dict[str, object]:
     dbt = _dbt_executable()
     project_dir = project_dir.resolve()
@@ -440,13 +445,34 @@ def run_dbt_commands(
         config=config,
         failed_step="dbt_debug",
     )
-    run_summary = _run_command(
-        [dbt, "run", *common_args],
-        project_dir=project_dir,
-        config=config,
-        failed_step="data_marts",
-    )
-    return {"debug": debug_summary, "run": run_summary}
+    layer_summaries: dict[str, object] = {}
+    for layer_key, node_type, model_path in DBT_LAYER_RUN_SPECS:
+        if on_layer_status:
+            on_layer_status(node_type, "running")
+        try:
+            layer_summaries[layer_key] = _run_command(
+                [dbt, "run", *common_args, "--select", f"path:{model_path}"],
+                project_dir=project_dir,
+                config=config,
+                failed_step=layer_key,
+            )
+        except DbtExecutionError:
+            if on_layer_status:
+                on_layer_status(node_type, "failed")
+            raise
+        if on_layer_status:
+            on_layer_status(node_type, "completed")
+
+    return {
+        "debug": debug_summary,
+        "run": {
+            "returncode": 0,
+            "stdout_tail": "dbt layer runs completed.",
+            "stderr_tail": "",
+            "layers": layer_summaries,
+        },
+        "layers": layer_summaries,
+    }
 
 
 def _write_file(path: Path, content: str) -> None:
@@ -625,15 +651,270 @@ group by 1, 2
     }
 
 
-def _generic_models(proposal: ValidatedModelingProposal) -> dict[str, list[str]]:
+def _dataset_model_slug(dataset: Dataset, *, max_length: int) -> str:
+    stem = Path(dataset.name or dataset.id).stem
+    tokens = [
+        token.lower()
+        for token in re.findall(r"[A-Za-z0-9]+", stem)
+        if token.lower() != "raw"
+    ]
+    slug = "_".join(tokens) or "dataset"
+    if not re.match(r"^[a-z_]", slug):
+        slug = f"dataset_{slug}"
+    return slug[:max_length].strip("_") or "dataset"
+
+
+def _dataset_model_suffix(dataset: Dataset) -> str:
+    return hashlib.sha1(dataset.id.encode("utf-8")).hexdigest()[:8]
+
+
+def _uploaded_base_model_names(dataset: Dataset) -> tuple[str, str]:
+    suffix = _dataset_model_suffix(dataset)
+    max_slug_length = min(
+        64 - len("stg_") - len("_") - len(suffix),
+        64 - len("int_") - len("_") - len(suffix) - len("_enriched"),
+    )
+    slug = _dataset_model_slug(dataset, max_length=max_slug_length)
+    return f"stg_{slug}_{suffix}", f"int_{slug}_{suffix}_enriched"
+
+
+def _generic_models(
+    dataset: Dataset,
+    proposal: ValidatedModelingProposal,
+) -> dict[str, list[str]]:
+    staging_model, intermediate_model = _uploaded_base_model_names(dataset)
     return {
-        "staging": ["stg_uploaded"],
-        "intermediate": ["int_uploaded_enriched"],
+        "staging": [staging_model],
+        "intermediate": [intermediate_model],
         "dimensional_model": [
             proposal.fact_table_name,
             *[dimension.name for dimension in proposal.dimensions],
         ],
         "data_marts": [mart.name for mart in proposal.marts],
+    }
+
+
+def _relationship(
+    *,
+    from_model: str,
+    to_model: str,
+    relationship_type: str,
+    join_fields: list[str],
+) -> dict[str, object]:
+    return {
+        "from_model": from_model,
+        "to_model": to_model,
+        "relationship_type": relationship_type,
+        "join_fields": join_fields,
+    }
+
+
+def _retail_model_metadata() -> dict[str, object]:
+    dimensions = [
+        {
+            "name": "dim_customer",
+            "grain": "one row per customer",
+            "key_column": "customer_id",
+            "columns": ["customer_id", "customer_name", "customer_segment"],
+        },
+        {
+            "name": "dim_product",
+            "grain": "one row per product",
+            "key_column": "product_id",
+            "columns": ["product_id", "product_name", "product_category"],
+        },
+        {
+            "name": "dim_store",
+            "grain": "one row per store",
+            "key_column": "store_id",
+            "columns": ["store_id", "store_name", "store_region"],
+        },
+        {
+            "name": "dim_date",
+            "grain": "one row per order date",
+            "key_column": "order_date",
+            "columns": ["order_date", "order_month", "order_year", "order_month_number"],
+        },
+    ]
+    marts = [
+        {
+            "name": "mart_sales_performance",
+            "grain": "one row per month",
+            "dimensions": ["order_month"],
+            "metrics": ["orders", "quantity", "revenue", "gross_margin"],
+            "related_dimensions": ["dim_date"],
+        },
+        {
+            "name": "mart_product_performance",
+            "grain": "one row per product category and product",
+            "dimensions": ["product_category", "product_name"],
+            "metrics": ["quantity", "revenue", "gross_margin"],
+            "related_dimensions": ["dim_product"],
+        },
+        {
+            "name": "mart_customer_segments",
+            "grain": "one row per customer segment",
+            "dimensions": ["customer_segment"],
+            "metrics": ["orders", "revenue", "average_order_value"],
+            "related_dimensions": ["dim_customer"],
+        },
+        {
+            "name": "mart_store_performance",
+            "grain": "one row per store region and store",
+            "dimensions": ["store_region", "store_name"],
+            "metrics": ["orders", "revenue"],
+            "related_dimensions": ["dim_store"],
+        },
+    ]
+    relationships = [
+        _relationship(
+            from_model="fact_sales",
+            to_model="dim_customer",
+            relationship_type="fact_to_dimension",
+            join_fields=["customer_id"],
+        ),
+        _relationship(
+            from_model="fact_sales",
+            to_model="dim_product",
+            relationship_type="fact_to_dimension",
+            join_fields=["product_id"],
+        ),
+        _relationship(
+            from_model="fact_sales",
+            to_model="dim_store",
+            relationship_type="fact_to_dimension",
+            join_fields=["store_id"],
+        ),
+        _relationship(
+            from_model="fact_sales",
+            to_model="dim_date",
+            relationship_type="fact_to_dimension",
+            join_fields=["order_date"],
+        ),
+        _relationship(
+            from_model="mart_sales_performance",
+            to_model="dim_date",
+            relationship_type="mart_to_dimension",
+            join_fields=["order_month"],
+        ),
+        _relationship(
+            from_model="mart_product_performance",
+            to_model="dim_product",
+            relationship_type="mart_to_dimension",
+            join_fields=["product_category", "product_name"],
+        ),
+        _relationship(
+            from_model="mart_customer_segments",
+            to_model="dim_customer",
+            relationship_type="mart_to_dimension",
+            join_fields=["customer_segment"],
+        ),
+        _relationship(
+            from_model="mart_store_performance",
+            to_model="dim_store",
+            relationship_type="mart_to_dimension",
+            join_fields=["store_region", "store_name"],
+        ),
+    ]
+    return {
+        "generated_from": "raw_retail_contract",
+        "fact": {
+            "name": "fact_sales",
+            "grain": "one row per order line",
+            "keys": [
+                "order_line_id",
+                "order_id",
+                "customer_id",
+                "product_id",
+                "store_id",
+                "order_date",
+            ],
+            "metrics": ["quantity", "revenue", "cost", "gross_margin"],
+            "date_columns": ["order_date"],
+            "degenerate_dimensions": ["payment_method"],
+        },
+        "dimensions": dimensions,
+        "marts": marts,
+        "relationships": relationships,
+    }
+
+
+def _dimension_grain(dimension: ValidatedModelDimension) -> str:
+    entity_name = dimension.name.removeprefix("dim_").replace("_", " ")
+    return f"one row per {entity_name}"
+
+
+def _related_dimension_names(
+    mart: ValidatedModelMart,
+    dimensions: list[ValidatedModelDimension],
+) -> list[str]:
+    related: list[str] = []
+    mart_dimension_set = set(mart.dimensions)
+    for dimension in dimensions:
+        if mart_dimension_set.intersection(dimension.columns):
+            related.append(dimension.name)
+    return related
+
+
+def _model_metadata_from_proposal(
+    proposal: ValidatedModelingProposal,
+) -> dict[str, object]:
+    dimensions = [
+        {
+            "name": dimension.name,
+            "grain": _dimension_grain(dimension),
+            "key_column": dimension.key_column,
+            "columns": dimension.columns,
+        }
+        for dimension in proposal.dimensions
+    ]
+    marts = [
+        {
+            "name": mart.name,
+            "grain": mart.grain,
+            "dimensions": mart.dimensions,
+            "metrics": mart.metrics,
+            "related_dimensions": _related_dimension_names(mart, proposal.dimensions),
+        }
+        for mart in proposal.marts
+    ]
+    relationships = [
+        _relationship(
+            from_model=proposal.fact_table_name,
+            to_model=dimension.name,
+            relationship_type="fact_to_dimension",
+            join_fields=[dimension.key_column],
+        )
+        for dimension in proposal.dimensions
+    ]
+    for mart in proposal.marts:
+        for dimension in proposal.dimensions:
+            join_fields = [
+                field for field in mart.dimensions if field in set(dimension.columns)
+            ]
+            if not join_fields:
+                continue
+            relationships.append(
+                _relationship(
+                    from_model=mart.name,
+                    to_model=dimension.name,
+                    relationship_type="mart_to_dimension",
+                    join_fields=join_fields,
+                )
+            )
+    return {
+        "generated_from": "modeling_proposal",
+        "fact": {
+            "name": proposal.fact_table_name,
+            "grain": proposal.fact_grain,
+            "keys": proposal.fact_dimension_keys,
+            "metrics": proposal.fact_measures,
+            "date_columns": proposal.fact_date_columns,
+            "degenerate_dimensions": proposal.fact_degenerate_dimensions,
+        },
+        "dimensions": dimensions,
+        "marts": marts,
+        "relationships": relationships,
     }
 
 
@@ -673,6 +954,7 @@ def _generic_sql(
     proposal: ValidatedModelingProposal,
 ) -> dict[str, str]:
     raw_relation = _raw_relation(dataset)
+    staging_model, intermediate_model = _uploaded_base_model_names(dataset)
     select_lines = [
         f"  nullif(trim({snowflake_service.quote_identifier(mapping.profile.snowflake_column_name)}), '') "
         f"as {mapping.approved_name}"
@@ -712,20 +994,20 @@ def _generic_sql(
     )
     fact_select_lines = [_sql_select_line(column) for column in fact_columns]
     sql_files = {
-        "models/staging/stg_uploaded.sql": (
+        f"models/staging/{staging_model}.sql": (
             "select\n"
             + ",\n".join(select_lines)
             + f"\nfrom {raw_relation}"
         ),
-        "models/intermediate/int_uploaded_enriched.sql": (
+        f"models/intermediate/{intermediate_model}.sql": (
             "select\n"
             + ",\n".join(intermediate_lines)
-            + "\nfrom {{ ref('stg_uploaded') }}"
+            + f"\nfrom {{{{ ref('{staging_model}') }}}}"
         ),
         f"models/dimensional/{proposal.fact_table_name}.sql": (
             "select\n"
             + ",\n".join(fact_select_lines)
-            + "\nfrom {{ ref('int_uploaded_enriched') }}"
+            + f"\nfrom {{{{ ref('{intermediate_model}') }}}}"
         ),
     }
     for dimension in proposal.dimensions:
@@ -733,7 +1015,7 @@ def _generic_sql(
         sql_files[f"models/dimensional/{dimension.name}.sql"] = (
             "select distinct\n"
             + ",\n".join(dimension_lines)
-            + "\nfrom {{ ref('int_uploaded_enriched') }}\n"
+            + f"\nfrom {{{{ ref('{intermediate_model}') }}}}\n"
             f"where {dimension.key_column} is not null"
         )
 
@@ -792,6 +1074,7 @@ def _generated_project(
         sql_files = _retail_sql(_raw_relation(dataset))
         modeling_proposal_json = None
         analysis_catalog = None
+        model_metadata = _retail_model_metadata()
     else:
         if modeling_proposal is None:
             raise AppError(
@@ -801,10 +1084,11 @@ def _generated_project(
                 next_action="Generate or retry the modeling proposal before dbt transformation.",
                 status_code=status.HTTP_400_BAD_REQUEST,
             )
-        models = _generic_models(modeling_proposal)
+        models = _generic_models(dataset, modeling_proposal)
         sql_files = _generic_sql(dataset, mappings, modeling_proposal)
         modeling_proposal_json = proposal_to_json(modeling_proposal)
         analysis_catalog = proposal_analysis_catalog(modeling_proposal)
+        model_metadata = _model_metadata_from_proposal(modeling_proposal)
 
     project_yml = _project_yml(project_name, profile_name)
     profiles_yml = _profile_yml(profile_name, config.dbt_target_name, config.dbt_threads)
@@ -846,6 +1130,7 @@ def _generated_project(
         artifacts=files,
         modeling_proposal=modeling_proposal_json,
         analysis_catalog=analysis_catalog,
+        model_metadata=model_metadata,
     )
 
 
@@ -876,6 +1161,61 @@ def _clear_previous_data_flow(db: Session, dataset: Dataset) -> None:
         db.delete(edge)
     for node in list(dataset.data_flow_nodes):
         db.delete(node)
+
+
+def _initial_node_status(node_type: str) -> str:
+    if node_type in {"raw_input", "warehouse_raw"}:
+        return "completed"
+    return "waiting"
+
+
+def _initialize_data_flow_progress(
+    *,
+    db: Session,
+    dataset: Dataset,
+    models: dict[str, list[str]],
+) -> None:
+    _clear_previous_data_flow(db, dataset)
+    nodes: list[DataFlowNode] = []
+    for node_type, label in PREP_NODE_SPECS:
+        layer_key = "data_marts" if node_type == "data_mart" else node_type
+        model_names = models.get(layer_key, [])
+        node = DataFlowNode(
+            dataset=dataset,
+            node_type=node_type,
+            name=node_type,
+            label=label,
+            status=_initial_node_status(node_type),
+            metadata_json={"models": model_names} if model_names else None,
+        )
+        db.add(node)
+        nodes.append(node)
+
+    db.flush()
+    for from_node, to_node in zip(nodes, nodes[1:], strict=False):
+        db.add(
+            DataFlowEdge(
+                dataset=dataset,
+                from_node=from_node,
+                to_node=to_node,
+                edge_type="prepares",
+                metadata_json=None,
+            )
+        )
+
+
+def _set_data_flow_node_status(
+    *,
+    db: Session,
+    dataset: Dataset,
+    node_type: str,
+    node_status: str,
+) -> None:
+    for node in dataset.data_flow_nodes:
+        if node.node_type == node_type:
+            node.status = node_status
+            db.commit()
+            return
 
 
 def _store_data_flow(
@@ -936,6 +1276,7 @@ def _completed_transform_response(
     dataset: Dataset,
     transformation_run: DatasetTransformationRun,
     models: dict[str, list[str]],
+    model_metadata: dict[str, object] | None = None,
 ) -> DatasetTransformResponse:
     return DatasetTransformResponse(
         status="completed",
@@ -943,6 +1284,7 @@ def _completed_transform_response(
         transformation_run=_summary_from_run(transformation_run),
         layers_completed=TRANSFORMATION_LAYERS,
         models=models,
+        model_metadata=model_metadata,
         next_route="/demo/dashboard",
     )
 
@@ -971,6 +1313,7 @@ def transform_dataset(
             dataset,
             latest_success,
             latest_success.dbt_run_summary_json.get("models", {}) if latest_success.dbt_run_summary_json else {},
+            _model_metadata_from_run(latest_success),
         )
 
     mappings = _ensure_semantic_mappings(dataset)
@@ -1013,17 +1356,31 @@ def transform_dataset(
             project=project,
             config=config,
         )
+        _initialize_data_flow_progress(db=db, dataset=dataset, models=project.models)
+        db.commit()
+        db.refresh(dataset)
+
+        def mark_layer_status(node_type: str, node_status: str) -> None:
+            _set_data_flow_node_status(
+                db=db,
+                dataset=dataset,
+                node_type=node_type,
+                node_status=node_status,
+            )
+
         command_summary = run_dbt_commands(
             project_dir=project.project_dir,
             profiles_dir=project.profiles_dir,
             target_name=config.dbt_target_name,
             config=config,
+            on_layer_status=mark_layer_status,
         )
         transformation_run.status = "completed"
         transformation_run.completed_at = utc_now()
         run_summary_json = {
             "models": project.models,
             "commands": command_summary,
+            "model_metadata": project.model_metadata,
         }
         if project.modeling_proposal is not None:
             run_summary_json["modeling_proposal"] = project.modeling_proposal
@@ -1064,7 +1421,12 @@ def transform_dataset(
         db.commit()
         db.refresh(dataset)
         db.refresh(transformation_run)
-        return _completed_transform_response(dataset, transformation_run, project.models)
+        return _completed_transform_response(
+            dataset,
+            transformation_run,
+            project.models,
+            project.model_metadata,
+        )
     except AppError as exc:
         transformation_run.status = "failed"
         transformation_run.completed_at = utc_now()
@@ -1154,10 +1516,76 @@ def _models_from_run(run: DatasetTransformationRun | None) -> dict[str, list[str
     }
 
 
+def _model_metadata_from_run(run: DatasetTransformationRun | None) -> dict[str, object] | None:
+    if not run or not run.dbt_run_summary_json:
+        return None
+    model_metadata = run.dbt_run_summary_json.get("model_metadata")
+    if not isinstance(model_metadata, dict):
+        return None
+    return model_metadata
+
+
+def _snowflake_configured(config: Settings) -> bool:
+    return bool(
+        config.snowflake_account
+        and config.snowflake_user
+        and config.snowflake_password
+        and config.snowflake_warehouse
+        and config.snowflake_database
+        and config.snowflake_schema
+    )
+
+
+def _raw_preview_from_dataset(
+    dataset: Dataset,
+    *,
+    config: Settings = settings,
+) -> RawTablePreviewResponse:
+    columns = [profile.raw_column_name for profile in dataset.column_profiles]
+    snowflake_columns = [
+        (profile.snowflake_column_name, profile.raw_column_name)
+        for profile in dataset.column_profiles
+    ]
+
+    if not _snowflake_configured(config):
+        return RawTablePreviewResponse(
+            status="not_configured",
+            columns=columns,
+            rows=[],
+            row_count_previewed=0,
+            message="Snowflake is not configured, so raw row preview is unavailable.",
+        )
+
+    try:
+        result = snowflake_service.execute_raw_table_preview(
+            raw_table_name=dataset.raw_table_name,
+            columns=snowflake_columns,
+            preview_limit=10,
+            config=config,
+        )
+    except snowflake_service.SnowflakeServiceError:
+        return RawTablePreviewResponse(
+            status="failed",
+            columns=columns,
+            rows=[],
+            row_count_previewed=0,
+            message="MeshFlow could not read the first 10 rows from the Snowflake raw table.",
+        )
+
+    return RawTablePreviewResponse(
+        status="completed",
+        columns=columns,
+        rows=result.preview_rows,
+        row_count_previewed=result.row_count,
+        message=None,
+    )
+
+
 def get_dataset_data_flow(
     db: Session,
     session_id: str | None,
     dataset_id: str,
+    config: Settings = settings,
 ) -> DatasetDataFlowResponse:
     dataset = _load_dataset(db, session_id, dataset_id)
     latest_run = dataset.transformation_runs[-1] if dataset.transformation_runs else None
@@ -1179,6 +1607,8 @@ def get_dataset_data_flow(
         edges=edges,
         artifacts=[_artifact_summary(artifact) for artifact in latest_run_artifacts],
         models=_models_from_run(latest_run),
+        model_metadata=_model_metadata_from_run(latest_run),
+        raw_preview=_raw_preview_from_dataset(dataset, config=config),
         question_suggestions=question_suggestions_summary_from_dataset(dataset),
     )
 

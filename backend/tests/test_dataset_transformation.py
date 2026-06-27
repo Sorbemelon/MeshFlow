@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.services import dbt_transformation_service
+from app.services import dbt_transformation_service, snowflake_service
 from app.models.dataset import (
     AiProviderRun,
     ColumnProfile,
@@ -280,6 +280,22 @@ def create_complex_uploaded_dataset(db_session: Session, session_id: str) -> str
     return dataset.id
 
 
+def test_uploaded_base_model_names_use_dataset_name_without_raw_token() -> None:
+    dataset = Dataset(id="ds_customer_orders_2026", name="RAW Customer Orders 2026.csv")
+
+    staging_model, intermediate_model = (
+        dbt_transformation_service._uploaded_base_model_names(dataset)
+    )
+
+    assert staging_model.startswith("stg_customer_orders_2026_")
+    assert intermediate_model.startswith("int_customer_orders_2026_")
+    assert intermediate_model.endswith("_enriched")
+    assert "_raw_" not in staging_model
+    assert "_raw_" not in intermediate_model
+    assert len(staging_model) <= 64
+    assert len(intermediate_model) <= 64
+
+
 def patch_transform_dependencies(monkeypatch, *, fail: bool = False) -> None:
     monkeypatch.setattr(
         "app.services.dbt_transformation_service.readiness_service.check_snowflake_readiness",
@@ -534,6 +550,15 @@ def test_raw_retail_transform_success_creates_evidence_and_ready_dataset(
     ]
     assert body["models"]["staging"] == ["stg_retail_transactions"]
     assert "mart_sales_performance" in body["models"]["data_marts"]
+    assert body["model_metadata"]["fact"]["name"] == "fact_sales"
+    assert {
+        (relationship["from_model"], relationship["to_model"])
+        for relationship in body["model_metadata"]["relationships"]
+        if relationship["relationship_type"] == "mart_to_dimension"
+    } >= {
+        ("mart_product_performance", "dim_product"),
+        ("mart_customer_segments", "dim_customer"),
+    }
     assert body["next_route"] == "/demo/dashboard"
 
     db_session.expire_all()
@@ -656,6 +681,10 @@ def test_uploaded_csv_transform_uses_ai_modeling_proposal_for_dbt_marts(
     assert response.status_code == 200
     body = response.json()
     assert body["dataset"]["status"] == "ready_for_analysis"
+    assert body["models"]["staging"] == ["stg_complex_b2b_orders_ecdd1a77"]
+    assert body["models"]["intermediate"] == [
+        "int_complex_b2b_orders_ecdd1a77_enriched"
+    ]
     assert body["models"]["dimensional_model"] == [
         "fact_invoice_lines",
         "dim_customer",
@@ -667,12 +696,33 @@ def test_uploaded_csv_transform_uses_ai_modeling_proposal_for_dbt_marts(
         "mart_product_performance",
         "mart_customer_segments",
     ]
+    assert body["model_metadata"]["generated_from"] == "modeling_proposal"
+    assert body["model_metadata"]["fact"]["grain"] == "one row per invoice line"
+    assert body["model_metadata"]["dimensions"][0] == {
+        "name": "dim_customer",
+        "grain": "one row per customer",
+        "key_column": "customer_id",
+        "columns": [
+            "customer_id",
+            "customer_name",
+            "customer_segment",
+            "customer_region",
+        ],
+    }
+    assert body["model_metadata"]["marts"][1]["related_dimensions"] == ["dim_product"]
 
     db_session.expire_all()
     run = db_session.scalar(select(DatasetTransformationRun))
     assert run.dbt_run_summary_json["modeling_proposal"]["fact_table"]["name"] == (
         "fact_invoice_lines"
     )
+    assert run.dbt_run_summary_json["model_metadata"]["marts"][2] == {
+        "name": "mart_customer_segments",
+        "grain": "one row per customer segment",
+        "dimensions": ["customer_segment"],
+        "metrics": ["net_revenue", "gross_margin"],
+        "related_dimensions": ["dim_customer"],
+    }
     assert run.dbt_run_summary_json["analysis_catalog"]["mart_product_performance"] == {
         "grain": "one row per product category",
         "dimensions": ["product_category"],
@@ -681,6 +731,10 @@ def test_uploaded_csv_transform_uses_ai_modeling_proposal_for_dbt_marts(
     artifact_text = "\n".join(
         artifact.content_redacted for artifact in db_session.scalars(select(DbtArtifact)).all()
     )
+    assert "models/staging/stg_complex_b2b_orders_ecdd1a77.sql" not in artifact_text
+    assert "models/intermediate/int_complex_b2b_orders_ecdd1a77_enriched.sql" not in artifact_text
+    assert "ref('stg_complex_b2b_orders_ecdd1a77')" in artifact_text
+    assert "ref('int_complex_b2b_orders_ecdd1a77_enriched')" in artifact_text
     assert "models/dimensional/fact_invoice_lines.sql" not in artifact_text
     assert "left join {{ ref('dim_product') }} d_product" in artifact_text
     assert "sum(f.net_revenue) as net_revenue" in artifact_text
@@ -691,6 +745,21 @@ def test_uploaded_csv_transform_uses_ai_modeling_proposal_for_dbt_marts(
     assert modeling_run.status == "completed"
     dataset = db_session.get(Dataset, dataset_id)
     assert "mart_customer_segments" in analysis_catalog_for_dataset(dataset)
+    data_flow_response = client.get(
+        f"/api/v1/datasets/{dataset_id}/data-flow",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+    assert data_flow_response.status_code == 200
+    data_flow = data_flow_response.json()
+    assert data_flow["model_metadata"]["fact"]["name"] == "fact_invoice_lines"
+    assert {
+        (relationship["from_model"], relationship["to_model"])
+        for relationship in data_flow["model_metadata"]["relationships"]
+        if relationship["relationship_type"] == "mart_to_dimension"
+    } >= {
+        ("mart_product_performance", "dim_product"),
+        ("mart_customer_segments", "dim_customer"),
+    }
     questions = db_session.scalars(select(DatasetQuestionSuggestion)).all()
     assert len(questions) == 2
 
@@ -755,3 +824,75 @@ def test_data_flow_endpoint_returns_transformation_evidence(
     assert body["transformation"]["status"] == "completed"
     assert [node["status"] for node in body["nodes"]] == ["completed"] * 6
     assert body["models"]["data_marts"]
+    assert body["model_metadata"]["fact"]["name"] == "fact_sales"
+    assert body["model_metadata"]["marts"][0]["related_dimensions"]
+
+
+def test_data_flow_endpoint_returns_raw_preview_rows(
+    client: TestClient,
+    monkeypatch,
+    db_session: Session,
+) -> None:
+    session_id = create_session(client)
+    dataset_id = create_dataset(db_session, session_id)
+
+    for field_name in [
+        "snowflake_account",
+        "snowflake_user",
+        "snowflake_password",
+        "snowflake_warehouse",
+        "snowflake_database",
+        "snowflake_schema",
+    ]:
+        monkeypatch.setattr(dbt_transformation_service.settings, field_name, "configured")
+
+    def fake_raw_preview(**kwargs):
+        assert kwargs["raw_table_name"] == "RAW_UPLOAD_TRANSFORM_TEST"
+        assert kwargs["preview_limit"] == 10
+        return snowflake_service.SnowflakeQueryResult(
+            output_schema=[
+                {"name": "order_id", "type": "raw"},
+                {"name": "revenue", "type": "raw"},
+            ],
+            preview_rows=[
+                {"order_id": "ORD-1", "revenue": "100.00"},
+                {"order_id": "ORD-2", "revenue": "125.00"},
+            ],
+            row_count=2,
+        )
+
+    monkeypatch.setattr(
+        dbt_transformation_service.snowflake_service,
+        "execute_raw_table_preview",
+        fake_raw_preview,
+    )
+
+    response = client.get(
+        f"/api/v1/datasets/{dataset_id}/data-flow",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["raw_preview"]["status"] == "completed"
+    assert body["raw_preview"]["row_count_previewed"] == 2
+    assert body["raw_preview"]["rows"][0]["order_id"] == "ORD-1"
+    assert body["raw_preview"]["columns"][0] == "order_id"
+
+
+def test_data_flow_endpoint_reports_raw_preview_not_configured(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    session_id = create_session(client)
+    dataset_id = create_dataset(db_session, session_id)
+
+    response = client.get(
+        f"/api/v1/datasets/{dataset_id}/data-flow",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["raw_preview"]["status"] == "not_configured"
+    assert body["raw_preview"]["rows"] == []

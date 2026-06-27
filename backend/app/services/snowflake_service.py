@@ -266,6 +266,55 @@ def execute_analysis_query(
     )
 
 
+def execute_raw_table_preview(
+    *,
+    raw_table_name: str,
+    columns: list[tuple[str, str]],
+    preview_limit: int = 10,
+    config: Settings = settings,
+) -> SnowflakeQueryResult:
+    if not raw_table_name.startswith("RAW_UPLOAD_"):
+        raise SnowflakeServiceError("Only MeshFlow-generated raw upload tables can be previewed.")
+    if preview_limit < 1 or preview_limit > 50:
+        raise SnowflakeServiceError("Raw table preview limit must be between 1 and 50.")
+    if not columns:
+        return SnowflakeQueryResult(output_schema=[], preview_rows=[], row_count=0)
+
+    quoted_table = _quote_identifier(raw_table_name)
+    snowflake_columns = [snowflake_name for snowflake_name, _raw_name in columns]
+    raw_columns = [raw_name for _snowflake_name, raw_name in columns]
+    selected_columns = ", ".join(_quote_identifier(column) for column in snowflake_columns)
+
+    connection = _connect(config)
+    try:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(f"SELECT {selected_columns} FROM {quoted_table} LIMIT {int(preview_limit)}")
+            rows = cursor.fetchall()
+            preview_rows = [
+                {
+                    raw_column: _json_safe(value)
+                    for raw_column, value in zip(raw_columns, row, strict=False)
+                }
+                for row in rows
+            ]
+        finally:
+            cursor.close()
+    except Exception as exc:
+        raise SnowflakeServiceError("Snowflake raw table preview query failed.") from exc
+    finally:
+        connection.close()
+
+    return SnowflakeQueryResult(
+        output_schema=[
+            {"name": raw_column, "type": "raw"}
+            for raw_column in raw_columns
+        ],
+        preview_rows=preview_rows,
+        row_count=len(preview_rows),
+    )
+
+
 def drop_raw_table_for_cleanup(
     *,
     raw_table_name: str | None,
