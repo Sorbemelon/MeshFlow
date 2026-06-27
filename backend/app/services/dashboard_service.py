@@ -163,6 +163,23 @@ def _active_card_for_analysis(
     )
 
 
+def _archived_card_for_analysis(
+    db: Session,
+    session_id: str,
+    analysis_run_id: str,
+) -> DashboardCard | None:
+    return db.scalar(
+        select(DashboardCard)
+        .where(
+            DashboardCard.demo_session_id == session_id,
+            DashboardCard.analysis_run_id == analysis_run_id,
+            DashboardCard.card_type == RESULT_GROUP_CARD_TYPE,
+            DashboardCard.status == ARCHIVED_CARD_STATUS,
+        )
+        .order_by(DashboardCard.created_at.asc())
+    )
+
+
 def _active_cards_statement(session_id: str):
     return (
         select(DashboardCard)
@@ -292,12 +309,31 @@ def ensure_dashboard_card_for_analysis(
     session: DemoSession,
     analysis_run: AnalysisRun,
     config: Settings = settings,
-) -> tuple[DashboardCard, bool]:
+) -> tuple[DashboardCard, bool, bool]:
     existing = _active_card_for_analysis(db, session.id, analysis_run.id)
     if existing is not None:
-        return existing, False
+        return existing, False, False
 
     validate_analysis_for_dashboard_card(analysis_run)
+    archived = _archived_card_for_analysis(db, session.id, analysis_run.id)
+    if archived is not None:
+        snapshot = build_result_group_snapshot(analysis_run)
+        dataset_name = (
+            snapshot["dataset"].get("name") if isinstance(snapshot["dataset"], dict) else None
+        )
+        archived.dataset_id = analysis_run.dataset_id
+        archived.analysis_run = analysis_run
+        archived.title = analysis_run.question
+        archived.subtitle = analysis_run.source_model
+        archived.dataset_name_snapshot = dataset_name if isinstance(dataset_name, str) else None
+        archived.source_model_snapshot = analysis_run.source_model
+        archived.card_snapshot_json = snapshot
+        archived.sort_order = _next_sort_order(db, session.id)
+        archived.status = ACTIVE_CARD_STATUS
+        archived.archived_at = None
+        db.flush()
+        return archived, False, True
+
     ensure_dashboard_card_quota_available(session, config)
     snapshot = build_result_group_snapshot(analysis_run)
     dataset_name = snapshot["dataset"].get("name") if isinstance(snapshot["dataset"], dict) else None
@@ -318,7 +354,7 @@ def ensure_dashboard_card_for_analysis(
     db.flush()
     session.dashboard_cards_used += 1
     db.flush()
-    return card, True
+    return card, True, False
 
 
 def create_dashboard_card_from_analysis_run(
@@ -329,19 +365,25 @@ def create_dashboard_card_from_analysis_run(
 ) -> DashboardCardMutationResponse:
     session = get_required_session(db, session_id)
     analysis_run = _load_analysis_run_for_card(db, session, analysis_run_id)
-    card, created = ensure_dashboard_card_for_analysis(db, session, analysis_run, config)
+    card, created, restored = ensure_dashboard_card_for_analysis(
+        db,
+        session,
+        analysis_run,
+        config,
+    )
     db.commit()
     db.refresh(card)
+    message = "Dashboard card saved."
+    if restored:
+        message = "Dashboard card restored to the dashboard. Public quota was not used again."
+    elif not created:
+        message = "This analysis is already visible on the dashboard."
     return DashboardCardMutationResponse(
         card=dashboard_card_summary(card),
         cards_used=session.dashboard_cards_used,
         cards_limit=configured_limits(config).max_dashboard_cards_per_session,
         created=created,
-        message=(
-            "Dashboard card saved."
-            if created
-            else "This analysis is already visible on the dashboard."
-        ),
+        message=message,
     )
 
 

@@ -224,20 +224,28 @@ def _analysis_response(
         insight_message = "Analysis completed, but chart snapshots are unavailable for insights."
     dashboard_card = None
     dashboard_card_created = False
+    dashboard_card_restored = False
     dashboard_card_message = None
     if save_to_dashboard and dashboard_session is not None and chart_status == "completed":
-        card, dashboard_card_created = ensure_dashboard_card_for_analysis(
+        (
+            card,
+            dashboard_card_created,
+            dashboard_card_restored,
+        ) = ensure_dashboard_card_for_analysis(
             db,
             dashboard_session,
             run,
             config,
         )
         dashboard_card = dashboard_card_summary(card)
-        dashboard_card_message = (
-            "Dashboard card saved."
-            if dashboard_card_created
-            else "This analysis is already visible on the dashboard."
-        )
+        if dashboard_card_created:
+            dashboard_card_message = "Dashboard card saved."
+        elif dashboard_card_restored:
+            dashboard_card_message = (
+                "Dashboard card restored to the dashboard. Public quota was not used again."
+            )
+        else:
+            dashboard_card_message = "This analysis is already visible on the dashboard."
     return AnalysisRunResponse(
         analysis_run=_analysis_detail(run, decision_type_override=decision_type_override),
         charts=charts,
@@ -374,20 +382,7 @@ def _generic_catalog_from_transformation(dataset: Dataset) -> dict[str, dict[str
                 }
         if catalog:
             return catalog
-    models = latest_run.dbt_run_summary_json.get("models")
-    if not isinstance(models, dict):
-        return {}
-    data_marts = models.get("data_marts")
-    if not isinstance(data_marts, list) or "mart_uploaded_overview" not in data_marts:
-        return {}
-
-    return {
-        "mart_uploaded_overview": {
-            "grain": "one row per uploaded grouping value",
-            "dimensions": ["grouping_value"],
-            "metrics": ["row_count"],
-        }
-    }
+    return {}
 
 
 def analysis_catalog_for_dataset(dataset: Dataset) -> dict[str, dict[str, object]]:

@@ -86,17 +86,27 @@ function AxisTooltip({
   );
 }
 
-export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
+export function ChartRenderer({
+  chart,
+  compact = false,
+}: {
+  chart: AnalysisRunChartSummary;
+  compact?: boolean;
+}) {
   const spec = chart.chart_spec;
 
   if (spec.type === "kpi" && spec.value) {
     const value = chart.data[0]?.[spec.value.field];
     return (
-      <div className="flex min-h-56 flex-col justify-center rounded-md border border-violet-100 bg-violet-50/40 px-5 py-6">
+      <div
+        className={`flex flex-col justify-center rounded-md border border-violet-100 bg-violet-50/40 ${
+          compact ? "min-h-24 px-3 py-3" : "min-h-56 px-5 py-6"
+        }`}
+      >
         <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">
           {spec.value.label}
         </p>
-        <p className="mt-3 text-4xl font-semibold text-ink">
+        <p className={`${compact ? "mt-1 text-xl" : "mt-3 text-4xl"} font-semibold text-ink`}>
           {formatValue(value, spec.value.format)}
         </p>
       </div>
@@ -112,25 +122,29 @@ export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
     const commonAxisProps = {
       tickLine: false,
       axisLine: false,
-      tick: { fill: "#64748b", fontSize: 12 },
+      tick: { fill: "#64748b", fontSize: compact ? 10 : 12 },
     };
+    const chartHeight = compact ? "h-28" : "h-72";
+    const chartMargin = compact
+      ? { top: 4, right: 8, bottom: 0, left: 0 }
+      : { top: 8, right: 16, bottom: 8, left: 4 };
 
     if (spec.type === "line") {
       return (
-        <div className="h-72 w-full">
+        <div className={`${chartHeight} w-full`}>
           <ResponsiveContainer width="100%" height="100%" minWidth={1}>
-            <LineChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 4 }}>
+            <LineChart data={data} margin={chartMargin}>
               <CartesianGrid stroke="#e2e8f0" vertical={false} />
               <XAxis dataKey={spec.x.field} {...commonAxisProps} />
               <YAxis {...commonAxisProps} />
-              <Tooltip content={<AxisTooltip yField={spec.y} />} />
+              {compact ? null : <Tooltip content={<AxisTooltip yField={spec.y} />} />}
               <Line
                 type="monotone"
                 dataKey={spec.y.field}
                 stroke="#4f46e5"
-                strokeWidth={2.5}
-                dot={{ r: 3, strokeWidth: 2 }}
-                activeDot={{ r: 5 }}
+                strokeWidth={compact ? 2 : 2.5}
+                dot={compact ? false : { r: 3, strokeWidth: 2 }}
+                activeDot={compact ? undefined : { r: 5 }}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -140,12 +154,12 @@ export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
 
     if (spec.type === "horizontal_bar") {
       return (
-        <div className="h-72 w-full">
+        <div className={`${chartHeight} w-full`}>
           <ResponsiveContainer width="100%" height="100%" minWidth={1}>
             <BarChart
               data={data}
               layout="vertical"
-              margin={{ top: 8, right: 16, bottom: 8, left: 24 }}
+              margin={compact ? { top: 4, right: 8, bottom: 0, left: 4 } : { top: 8, right: 16, bottom: 8, left: 24 }}
             >
               <CartesianGrid stroke="#e2e8f0" horizontal={false} />
               <XAxis type="number" {...commonAxisProps} />
@@ -155,7 +169,7 @@ export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
                 width={110}
                 {...commonAxisProps}
               />
-              <Tooltip content={<AxisTooltip yField={spec.y} />} />
+              {compact ? null : <Tooltip content={<AxisTooltip yField={spec.y} />} />}
               <Bar dataKey={spec.y.field} fill="#6366f1" radius={[0, 6, 6, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -164,13 +178,13 @@ export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
     }
 
     return (
-      <div className="h-72 w-full">
+      <div className={`${chartHeight} w-full`}>
         <ResponsiveContainer width="100%" height="100%" minWidth={1}>
-          <BarChart data={data} margin={{ top: 8, right: 16, bottom: 8, left: 4 }}>
+          <BarChart data={data} margin={chartMargin}>
             <CartesianGrid stroke="#e2e8f0" vertical={false} />
             <XAxis dataKey={spec.x.field} {...commonAxisProps} />
             <YAxis {...commonAxisProps} />
-            <Tooltip content={<AxisTooltip yField={spec.y} />} />
+            {compact ? null : <Tooltip content={<AxisTooltip yField={spec.y} />} />}
             <Bar dataKey={spec.y.field} fill="#6366f1" radius={[6, 6, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
@@ -193,8 +207,8 @@ export function ChartRenderer({ chart }: { chart: AnalysisRunChartSummary }) {
             ))}
           </div>
         </div>
-        <div className="divide-y divide-border text-sm text-ink-soft">
-          {chart.data.slice(0, 10).map((row, rowIndex) => (
+        <div className={`divide-y divide-border text-ink-soft ${compact ? "text-xs" : "text-sm"}`}>
+          {chart.data.slice(0, compact ? 3 : 10).map((row, rowIndex) => (
             <div
               key={rowIndex}
               className="grid"
