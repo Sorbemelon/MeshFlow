@@ -2,7 +2,7 @@
 generated_by: scopian
 generator_schema: v0.2-B
 view: main
-generated_at: 2026-06-26T16:29:45+07:00
+generated_at: 2026-06-27T19:30:37+07:00
 non_canonical: true
 generated_mode: single
 canonical_inputs:
@@ -14,7 +14,7 @@ canonical_inputs:
 input_hashes:
   view: sha256:d8813ce52fd6
   sources: sha256:511e76b19a8e
-  buffer: sha256:e5f7edf6e91a
+  buffer: sha256:2e357258cf49
   context: sha256:5ef45bc1a5d7
   registry: sha256:4333ca27eae9
 ---
@@ -31,7 +31,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - view: main
 - view_path: docs/scopian/views/main/VIEW.md
-- generated_at: 2026-06-26T16:29:45+07:00
+- generated_at: 2026-06-27T19:30:37+07:00
 
 ## Selected Sources
 
@@ -55,6 +55,8 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 - 2026-06-16T03:36:40+07:00 DEC-20260616-0336-user-demo-limit-correction-AW5Q: Title: Align analysis-run limit with dashboard-card limit Decision: MeshFlow v2 now uses 8 successful analysis runs and 8 dashboard card ... (docs/scopian/views/main/buffer/decisions/DEC-20260616-0336-user-demo-limit-correction-AW5Q.md)
 - 2026-06-18T12:43:44+07:00 DEC-20260618-1243-user-revise-ai-provider-routing-and-m-3PZH: MeshFlow now uses two active Gemini API keys and two active Gemini models. GEMINI_API_KEY_3 and GEMINI_MODEL_3 are removed from the acti ... (docs/scopian/views/main/buffer/decisions/DEC-20260618-1243-user-revise-ai-provider-routing-and-m-3PZH.md)
 - 2026-06-26T14:55:53+07:00 DEC-20260626-1455-user-replace-count-based-upload-limit-P9QC: Title: Replace count-based upload limit with storage-based upload limit Decision: MeshFlow no longer shows or enforces a count-based upl ... (docs/scopian/views/main/buffer/decisions/DEC-20260626-1455-user-replace-count-based-upload-limit-P9QC.md)
+- 2026-06-27T05:25:34+07:00 DEC-20260627-0525-user-remove-demo-dataset-upload-count-NXJ5: Raw Retail demo dataset is no longer limited by a per-session demo dataset quota. MeshFlow still prevents duplicate active Raw Retail de ... (docs/scopian/views/main/buffer/decisions/DEC-20260627-0525-user-remove-demo-dataset-upload-count-NXJ5.md)
+- 2026-06-27T19:30:30+07:00 DEC-20260627-1930-user-post-refinement-workflow-and-das-E5MX: Post-refinement behavior remains within the current MeshFlow v2 demo scope: semantic preparation may run as an asynchronous backend job ... (docs/scopian/views/main/buffer/decisions/DEC-20260627-1930-user-post-refinement-workflow-and-das-E5MX.md)
 
 ## Scope Checklist
 
@@ -135,6 +137,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 | ITEM-allowed-with-limits-neutral-shell-deep-0f172a-slate-ff139273 | allowed_with_limits | Neutral: **Shell Deep** (#0f172a / slate-900): The workspace shell and sidebar background; also the ink color on light surfaces.; **Shell** (#1e293b / slate ... | DESIGN.md#neutral | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-post-api-v1-dashboard-cards-fbbc9622 | allowed_with_limits | POST /api/v1/dashboard/cards | docs/scopian/sources/API_CONTRACT.md#post-api-v1-dashboard-cards | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-post-api-v1-datasets-upload-pref-1b6ba8aa | allowed_with_limits | POST /api/v1/datasets/upload/preflight | docs/scopian/sources/API_CONTRACT.md#post-api-v1-datasets-upload-preflight | none | not_checked_in_generated_view |
+| ITEM-allowed-with-limits-post-refinement-behavior-remains-2cdc3f3f | allowed_with_limits | Post-refinement behavior remains within the current MeshFlow v2 demo scope: semantic preparation may run as an asynchronous backend job ... | docs/scopian/views/main/buffer/decisions/DEC-20260627-1930-user-post-refinement-workflow-and-das-E5MX.md | approved_buffer | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-secondary-brand-cyan-38bdf8-and-5820d5e6 | allowed_with_limits | Secondary: **Brand Cyan** (#38bdf8) and **Brand Violet** (#7c3aed): The logo gradient (cyan→violet). Identity-only — the mark, the landing hero accent, deco ... | DESIGN.md#secondary | none | not_checked_in_generated_view |
 | ITEM-allowed-with-limits-title-replace-count-based-upload-c152529f | allowed_with_limits | Title: Replace count-based upload limit with storage-based upload limit Decision: MeshFlow no longer shows or enforces a count-based upl ... | docs/scopian/views/main/buffer/decisions/DEC-20260626-1455-user-replace-count-based-upload-limit-P9QC.md | approved_buffer | not_checked_in_generated_view |
 | ITEM-likely-out-of-scope-1-core-rule-fa703ef6 | likely_out_of_scope | 1. Core rule | docs/scopian/sources/LEGACY_REFERENCE_RULES.md#1-core-rule | none | not_checked_in_generated_view |
@@ -152,6 +155,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 | ITEM-likely-out-of-scope-8-semantic-column-mapping-e8fefe80 | likely_out_of_scope | 8. Semantic column mapping | docs/scopian/sources/WAREHOUSE_DBT_EXECUTION.md#8-semantic-column-mapping | none | not_checked_in_generated_view |
 | ITEM-likely-out-of-scope-anti-references-upload-csv-ask-c-7d8070e8 | likely_out_of_scope | Anti-references: **"Upload CSV → ask chatbot → random chart."** The whole point is the warehouse-backed, validated path; never let the UI collapse into a to ... | PRODUCT.md#anti-references | none | not_checked_in_generated_view |
 | ITEM-likely-out-of-scope-post-api-v1-datasets-dataset-id-2d017204 | likely_out_of_scope | POST /api/v1/datasets/{dataset_id}/semantic-preparation | docs/scopian/sources/API_CONTRACT.md#post-api-v1-datasets-dataset-id-semantic-preparation | none | not_checked_in_generated_view |
+| ITEM-likely-out-of-scope-raw-retail-demo-dataset-is-no-lo-1bc97df4 | likely_out_of_scope | Raw Retail demo dataset is no longer limited by a per-session demo dataset quota. MeshFlow still prevents duplicate active Raw Retail de ... | docs/scopian/views/main/buffer/decisions/DEC-20260627-0525-user-remove-demo-dataset-upload-count-NXJ5.md | approved_buffer | not_checked_in_generated_view |
 | ITEM-decision-required-4-scopian-usage-fe55cd60 | decision_required | 4. Scopian usage | docs/scopian/sources/MAINTENANCE_RULES.md#4-scopian-usage | requires-decision | not_checked_in_generated_view |
 | ITEM-decision-required-8-preparation-ai-input-21923bff | decision_required | 8. Preparation AI input | docs/scopian/sources/AI_WORKFLOW.md#8-preparation-ai-input | none | not_checked_in_generated_view |
 | ITEM-conflict-detected-1-core-ai-principle-b39de112 | conflict_detected | 1. Core AI principle | docs/scopian/sources/AI_WORKFLOW.md#1-core-ai-principle | none | not_checked_in_generated_view |
@@ -162,8 +166,8 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 ## Coverage Snapshot
 
 - likely_in_scope: 18
-- allowed_with_limits: 59
-- likely_out_of_scope: 15
+- allowed_with_limits: 60
+- likely_out_of_scope: 16
 - decision_required: 2
 - conflict_detected: 4
 - insufficient_evidence: 0
@@ -174,19 +178,19 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 - template_only: true
 - correctness_claim: false
 - decision_required_items: 2
-- out_of_scope_items: 15
+- out_of_scope_items: 16
 
 ## Changelog Snapshot
 
-- generated_refresh: 2026-06-26T16:29:45+07:00
+- generated_refresh: 2026-06-27T19:30:37+07:00
 - selected_sources: 14
-- approved_buffer_records: 3
+- approved_buffer_records: 5
 
 ## Freshness Metadata
 
 - view: sha256:d8813ce52fd6
 - sources: sha256:511e76b19a8e
-- buffer: sha256:e5f7edf6e91a
+- buffer: sha256:2e357258cf49
 - context: sha256:5ef45bc1a5d7
 - registry: sha256:4333ca27eae9
 
