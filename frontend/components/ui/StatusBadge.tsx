@@ -32,7 +32,7 @@ const ICONS: Record<Status, ReactNode> = {
     </svg>
   ),
   running: (
-    <svg {...ICON_PROPS}>
+    <svg {...ICON_PROPS} className="animate-spin">
       <path d="M16 5.5A7 7 0 1 0 17 10" />
       <path d="M16 3v3h-3" />
     </svg>
@@ -85,10 +85,12 @@ export function StatusBadge({
   status,
   label,
   className,
+  showIcon = true,
 }: {
   status: Status;
   label?: string;
   className?: string;
+  showIcon?: boolean;
 }) {
   return (
     <span
@@ -98,7 +100,7 @@ export function StatusBadge({
         className,
       )}
     >
-      {ICONS[status]}
+      {showIcon ? ICONS[status] : null}
       {label ?? LABELS[status]}
     </span>
   );

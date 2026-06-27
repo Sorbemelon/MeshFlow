@@ -4,13 +4,13 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 
 export function WorkspaceTopBar() {
-  const { backendStatus, sessionStatus, workspace } = useWorkspaceSession();
+  const { backendStatus, sessionStatus } = useWorkspaceSession();
 
   const demoBadge =
     sessionStatus === "active"
       ? {
           status: "ready" as const,
-          label: workspace?.session.status === "reset" ? "Reset" : "Active",
+          label: "Active",
         }
       : sessionStatus === "checking"
         ? { status: "running" as const, label: "Checking..." }
@@ -22,10 +22,10 @@ export function WorkspaceTopBar() {
 
   const backendBadge =
     backendStatus === "available"
-      ? { status: "ready" as const, label: "Backend available" }
+      ? { status: "ready" as const, label: "Available" }
       : backendStatus === "checking"
         ? { status: "running" as const, label: "Checking..." }
-        : { status: "failed" as const, label: "Backend unavailable" };
+        : { status: "failed" as const, label: "Unavailable" };
 
   return (
     <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-surface/95 px-6 py-3 backdrop-blur-sm">
@@ -51,12 +51,20 @@ export function WorkspaceTopBar() {
 
       <div className="flex flex-wrap items-center justify-end gap-2">
         <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-2.5 py-1">
-          <span className="text-xs font-medium text-ink-muted">Demo Status</span>
-          <StatusBadge status={demoBadge.status} label={demoBadge.label} />
+          <span className="text-xs font-medium text-ink-muted">Demo</span>
+          <StatusBadge
+            status={demoBadge.status}
+            label={demoBadge.label}
+            showIcon={false}
+          />
         </span>
         <span className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-2.5 py-1">
-          <span className="text-xs font-medium text-ink-muted">Backend Status</span>
-          <StatusBadge status={backendBadge.status} label={backendBadge.label} />
+          <span className="text-xs font-medium text-ink-muted">Backend</span>
+          <StatusBadge
+            status={backendBadge.status}
+            label={backendBadge.label}
+            showIcon={false}
+          />
         </span>
       </div>
     </header>
