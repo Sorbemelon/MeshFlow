@@ -38,7 +38,7 @@ Live Demo: https://meshflowai.vercel.app | Backend Health: https://meshflow.onre
 | Backend Health | https://meshflow.onrender.com/health |
 | API Base | https://meshflow.onrender.com/api/v1 |
 
-The hosted safe smoke passed for backend health, landing load, logo asset load, session/workspace/limits, upload preflight, and reset behavior. Full hosted S3 write, Snowflake write, dbt, and AI analysis smoke remains optional.
+MeshFlow has passed a hosted API workflow smoke on Vercel + Render using Supabase PostgreSQL metadata, AWS S3, Snowflake, dbt, Gemini, and OpenAI. Browser click-through, provider fallback, and independent credentialed S3/Snowflake cleanup inspection remain separate validation limits.
 
 ## What Is MeshFlow?
 
@@ -186,7 +186,7 @@ Upload success requires file validation, storage quota, S3 readiness, and Snowfl
 
 ## Deployment
 
-Planned deployment:
+Current deployment model:
 
 | Target | Root / Service | Notes |
 |---|---|---|
@@ -196,7 +196,7 @@ Planned deployment:
 | AWS S3 | external | Raw file storage under session-scoped keys. |
 | Snowflake | external | Warehouse Raw tables, dbt models, Data Marts, and analysis queries. |
 
-Hosted links are listed above. The verified hosted smoke covered non-destructive health, landing, session/workspace/limits, preflight, and reset behavior; the full hosted write/AI workflow has not been run yet.
+Hosted links are listed above. The full hosted API workflow smoke has passed across the deployed frontend and backend; browser click-through and provider fallback validation remain separate limits.
 
 Vercel frontend settings:
 
@@ -287,9 +287,9 @@ Use a Python version compatible with dbt 1.11 for live dbt execution. The local 
 
 ## Status
 
-MeshFlow has passed local automated checks and local smoke validation with configured Supabase PostgreSQL, AWS S3, Snowflake, dbt, Gemini, and OpenAI services. The hosted Render/Vercel safe smoke passed for health, landing load, session/workspace/limits, upload preflight with S3 and Snowflake readiness, and reset quota preservation. Full hosted write/dbt/AI analysis smoke remains optional and has not been run.
+MeshFlow has passed local automated checks, local live smoke, and a hosted API workflow smoke on Vercel + Render with Supabase PostgreSQL metadata, AWS S3, Snowflake, dbt, Gemini, and OpenAI. The hosted validation covered Raw Retail Demo upload, Warehouse Raw loading, dbt transformation into Data Marts, AI analysis planning, Snowflake analysis SELECT execution, ChartSpec generation, insight generation, dashboard card persistence, history/detail evidence, dashboard card removal, dataset deletion, and reset cleanup with preserved quota.
 
-Render should be configured with `APP_ENV=production` and `APP_DEBUG=false` for production labeling.
+Browser click-through and provider fallback were not covered in that hosted smoke. External cleanup verification used hosted cleanup statuses rather than independent credentialed S3/Snowflake inspection. Render should run with `APP_ENV=production` and `APP_DEBUG=false` for production labeling.
 
 ## License
 
