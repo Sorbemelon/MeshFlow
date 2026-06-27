@@ -4,9 +4,11 @@
 
 # MeshFlow
 
-MeshFlow is a warehouse-first AI analytics engineering demo workspace that turns raw datasets into Snowflake/dbt-backed data flows, dimensional models, Data Marts, AI-generated analysis runs, Recharts dashboards, insights, and evidence.
+Warehouse-first AI analytics engineering demo workspace.
 
-It is a portfolio-grade demo project, not a production SaaS. Successful data processing uses real AWS S3, Snowflake, and dbt.
+Turn raw datasets into S3-backed Snowflake raw tables, dbt Data Marts, AI analysis runs, Recharts dashboard cards, insights, and inspectable evidence.
+
+MeshFlow is a demo project, not production SaaS. It uses real AWS S3, Snowflake, and dbt for successful data processing. It does not use DuckDB, local fake analytics execution, or fake success paths.
 
 <p>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?style=flat-square" />
@@ -14,168 +16,177 @@ It is a portfolio-grade demo project, not a production SaaS. Successful data pro
   <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-4-38BDF8?style=flat-square" />
   <img alt="Recharts" src="https://img.shields.io/badge/Recharts-3.8-8884D8?style=flat-square" />
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square" />
-  <img alt="SQLAlchemy" src="https://img.shields.io/badge/SQLAlchemy-2.0-D71F00?style=flat-square" />
-  <img alt="Alembic" src="https://img.shields.io/badge/Alembic-migrations-6B7280?style=flat-square" />
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?style=flat-square" />
   <img alt="Snowflake" src="https://img.shields.io/badge/Snowflake-warehouse-29B5E8?style=flat-square" />
   <img alt="dbt" src="https://img.shields.io/badge/dbt-1.11-FF694B?style=flat-square" />
   <img alt="AWS S3" src="https://img.shields.io/badge/AWS_S3-storage-FF9900?style=flat-square" />
-  <img alt="OpenAI" src="https://img.shields.io/badge/OpenAI-provider-111827?style=flat-square" />
   <img alt="Gemini" src="https://img.shields.io/badge/Gemini-provider-7C3AED?style=flat-square" />
-  <img alt="Scopian" src="https://img.shields.io/badge/Scopian-scope-4F46E5?style=flat-square" />
-  <img alt="CrossHelix" src="https://img.shields.io/badge/CrossHelix-repo_intel-0F766E?style=flat-square" />
+  <img alt="OpenAI" src="https://img.shields.io/badge/OpenAI-provider-111827?style=flat-square" />
 </p>
 
-[What Is MeshFlow?](#what-is-meshflow) | [Why It Matters](#why-it-matters) | [Highlights](#highlights) | [Demo Flow](#demo-flow) | [Architecture](#architecture) | [AI Workflow](#ai-workflow) | [Demo Limits](#demo-limits) | [Local Development](#local-development) | [Safety And Boundaries](#safety-and-boundaries) | [Status](#status)
+Demo Flow | Architecture | Engineering Highlights | Local Development | Deployment
 
-**Live Demo:** not deployed yet
+Live Demo: not deployed yet | Backend API: local / deployment pending
 
-**Backend API:** local / deployment pending
+---
 
 ## What Is MeshFlow?
 
-MeshFlow is an AI analytics engineering workspace that prepares raw data through a real warehouse path:
+MeshFlow shows how an AI analytics workspace can move from raw data to trusted dashboard output:
 
 ```text
-Dataset
--> AWS S3
--> Snowflake Warehouse Raw
--> dbt Staging
--> Intermediate
--> Dimensional Model
--> Data Marts
--> AI Analytics Engineer
--> Dashboard
+Dataset -> AWS S3 -> Snowflake Warehouse Raw -> dbt -> Data Marts -> AI Analytics Engineer -> Dashboard
 ```
 
-The workspace supports a curated **Raw Retail Transactions Demo** and uploaded CSV datasets. It profiles raw warehouse data, supports semantic column mapping, runs dbt transformations, generates post-Data-Marts question suggestions, creates AI analysis runs, renders validated ChartSpecs with Recharts, and keeps an evidence trail for history and analysis detail.
+The demo includes a raw denormalized retail dataset and a CSV upload flow. MeshFlow profiles raw columns, supports semantic column mapping, builds warehouse/dbt models, generates analysis plans, runs Snowflake SELECT queries, renders Recharts cards, and stores evidence for History and Analysis Detail.
 
 ## Why It Matters
 
 | Theme | Why it matters |
 |---|---|
-| Warehouse-first processing | Successful data work goes through S3, Snowflake, and dbt instead of local mock analytics. |
-| Analytics engineering structure | Raw inputs become Staging, Intermediate, Dimensional Model, and Data Marts before analysis. |
-| AI with validation | AI proposes mappings, plans, modeling ideas, and insights; the backend validates before accepting output. |
-| Evidence-backed dashboards | Charts, SQL, preview rows, ChartSpecs, provider evidence, and snapshots stay inspectable. |
+| Warehouse-first analytics | Successful data work goes through S3, Snowflake, and dbt instead of local mock execution. |
+| Visible data preparation | Users can inspect raw schema, mappings, transformation evidence, marts, and model relationships. |
+| AI with validation | Providers propose mappings, plans, questions, and insights; backend validation decides what is accepted. |
+| Evidence-backed dashboards | SQL, ChartSpec JSON, preview rows, provider evidence, insights, and snapshots remain inspectable. |
 
 ## Highlights
 
-- Compact workspace with four pages: Upload Dataset, Data Flow, Dashboard, and History.
-- Raw Retail Transactions Demo plus uploaded CSV support.
-- Real S3 object storage and Snowflake Warehouse Raw loading.
+**Data workflow**
+- Raw Retail Transactions Demo and CSV upload.
+- S3 upload plus Snowflake Warehouse Raw load.
 - dbt Staging, Intermediate, Dimensional Model, and Data Marts.
-- AI semantic column mapping for schema review.
-- Suggested questions generated after Data Marts from the backend-known mart catalog.
-- AI analysis plan generation followed by backend-generated Snowflake SELECT execution.
-- Backend-owned ChartSpec generation rendered through Recharts.
-- AI insights generated only after real Snowflake result preview data exists.
-- History and Analysis Detail drawer with SQL, output schema, preview rows, ChartSpec JSON, charts, insights, provider evidence, and warnings.
-- Persisted dashboard cards with snapshots and quota enforcement.
-- Dataset delete, reset, expiry, and cleanup safeguards that preserve successful quota usage.
+- Post-Data-Marts question suggestions.
+
+**AI analytics**
+- Semantic column mapping suggestions.
+- AI-generated analysis plans with backend validation.
+- Snowflake analytical SELECT execution.
+- Backend-owned ChartSpec generation and Recharts rendering.
+- AI insights from actual result previews.
+
+**Workspace**
+- Four main pages: Upload Dataset, Data Flow, Dashboard, History.
+- Persisted dashboard cards with remove, compact/expand, and add-from-history behavior.
+- Analysis Detail drawer with SQL, output schema, preview rows, ChartSpec, charts, insights, and provider evidence.
+- Dataset delete and Reset Demo preserve successful quota usage and keep historical snapshots readable.
 
 ## Demo Flow
 
-| Step | What happens |
-|---|---|
-| Launch workspace | Create or continue an anonymous demo session. |
-| Use demo data or upload CSV | Load raw input through S3 and Snowflake Warehouse Raw. |
-| Review schema | Inspect profile data and semantic column mappings. |
-| Transform | Run dbt through Staging, Intermediate, Dimensional Model, and Data Marts. |
-| Ask AI Analytics Engineer | Create a validated analysis run against an attached ready dataset. |
-| Inspect charts and insights | View Recharts cards and AI insights generated from result previews. |
-| Open History / Detail | Inspect SQL, ChartSpec, preview rows, provider evidence, and status. |
-| Reset / cleanup | Clear workspace data while preserving public quota usage. |
+| Step | Action | What to notice |
+|---|---|---|
+| 1 | Launch demo session | Anonymous session with visible usage limits. |
+| 2 | Add data | Use the retail demo or upload a CSV after validation/readiness checks. |
+| 3 | Review schema | Inspect raw columns, profiles, examples, and semantic mappings. |
+| 4 | Transform | Run dbt into modeled Data Marts. |
+| 5 | Ask AI Analytics Engineer | Generate a validated plan for an attached ready dataset. |
+| 6 | View dashboard result | Inspect the chart, insight, dataset, source model, and saved card. |
+| 7 | Open History / Evidence | Review SQL, ChartSpec, preview rows, provider chain, and warnings. |
+| 8 | Delete or reset | Clear active workspace data without restoring public quota usage. |
+
+The demo is intentionally resource-limited: no account wall, clear quota display, honest setup/readiness failures, and no fake generated data.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  User[User] --> FE[Next.js Frontend]
-  FE --> API[FastAPI Backend]
-  API --> S3[AWS S3 Raw Files]
-  API --> SF[Snowflake Warehouse Raw + Data Marts]
-  API --> DBT[dbt Transformations]
-  API --> AI[Gemini / OpenAI Providers]
-  API --> META[(Metadata DB)]
-  FE --> DASH[Recharts Dashboard + Evidence]
+  User[User] --> FE[Next.js Frontend / Vercel]
+  FE --> API[FastAPI Backend / Render]
+  API --> PG[(Supabase PostgreSQL metadata)]
+  API --> S3[(AWS S3 raw files)]
+  API --> SF[(Snowflake warehouse + marts)]
+  API --> DBT[dbt transformations]
+  API --> AI[Gemini + OpenAI]
+  FE --> Charts[Recharts dashboard]
 ```
 
 How it works:
 
-- Frontend owns the workspace UX, routes, chart display, drawers, and honest loading/error states.
-- Backend owns sessions, validation, warehouse/dbt orchestration, provider routing, quotas, and cleanup.
-- S3 stores raw uploaded and demo files under session-scoped keys.
-- Snowflake runs Warehouse Raw loads and analytical SELECT queries.
-- dbt builds Staging, Intermediate, Dimensional Model, and Data Marts.
-- AI providers suggest mappings, modeling proposals, analysis plans, and insights, but backend validation decides what becomes trusted product state.
-- Dashboard cards store snapshots so history and dashboards remain readable after dataset deletion.
+- The frontend creates or restores a demo session and renders upload, data-flow, dashboard, and history views.
+- The backend owns sessions, validation, storage, warehouse/dbt orchestration, provider routing, quotas, cleanup, and evidence snapshots.
+- Supabase PostgreSQL stores metadata only; Snowflake is the analytical warehouse.
+- AWS S3 stores raw uploaded/demo files.
+- dbt builds Staging, Intermediate, Dimensional Model, and Data Marts against Snowflake.
+- Gemini and OpenAI provide structured AI output; backend validation remains the trust gate.
 
-## AI Workflow
+| Layer | Stack |
+|---|---|
+| Frontend | Next.js, TypeScript, Tailwind CSS, Recharts |
+| Backend | FastAPI, SQLAlchemy, Alembic, Pydantic |
+| Metadata DB | Supabase PostgreSQL |
+| Storage | AWS S3 |
+| Warehouse | Snowflake |
+| Transformations | dbt, dbt-snowflake |
+| AI | Gemini, OpenAI |
+| Quality / scope workflow | pytest, Scopian, CrossHelix |
 
-Active Gemini configuration:
+## AI Analytics Workflow
 
-```text
-GEMINI_API_KEY_1
-GEMINI_API_KEY_2
-GEMINI_MODEL_1
-GEMINI_MODEL_2
-```
+Semantic preparation is column mapping only. Suggested questions are generated after Data Marts exist, using the backend-known mart catalog.
 
-There is no active Gemini lane 3.
+Provider routing:
 
-Provider routing for semantic preparation, question suggestions, analysis plans, and insights:
+| Task | Route |
+|---|---|
+| Semantic prep, question suggestions, analysis plans, insights | `GEMINI_MODEL_1` key 1/2 -> OpenAI -> `GEMINI_MODEL_2` key 1/2 -> honest failure |
+| Uploaded CSV modeling proposal | `GEMINI_MODEL_1` key 1/2 -> `GEMINI_MODEL_2` key 1/2 -> OpenAI -> honest failure |
 
-```text
-GEMINI_MODEL_1 with key 1/2
--> OpenAI
--> GEMINI_MODEL_2 with key 1/2
--> honest failure
-```
-
-Provider routing for uploaded CSV modeling proposals:
-
-```text
-GEMINI_MODEL_1 with key 1/2
--> GEMINI_MODEL_2 with key 1/2
--> OpenAI
--> honest failure
-```
-
-Rules:
+Key rules:
 
 - No deterministic fake fallback.
-- Semantic preparation is column mapping only.
-- Suggested questions are generated after dbt/Data Marts.
 - AI proposes; backend validates.
-- Analysis plan providers do not provide trusted executable SQL.
-- Insights are generated only after actual Snowflake result data and ChartSpecs exist.
+- Provider-generated SQL is not trusted as executable product logic.
+- Insights are generated only after Snowflake result preview data exists.
+
+## Data Flow And Modeling
+
+```text
+Raw Input -> Warehouse Raw -> Staging -> Intermediate -> Dimensional Model -> Data Marts
+```
+
+For the retail demo, MeshFlow builds a star-schema-style dimensional model:
+
+- Fact: `fact_sales`
+- Dimensions: `dim_customer`, `dim_product`, `dim_store`, `dim_date`
+- Marts: sales performance, product performance, customer segments, store performance
+
+Uploaded CSV modeling is conservative. If the data is too ambiguous, MeshFlow should ask for clearer mappings or fail honestly instead of creating fake marts.
 
 ## Demo Limits
 
-Public demo limits protect hosted resources.
-
-| Limit | Current rule |
+| Category | Limit |
 |---|---|
-| Anonymous session lifetime | 3 days |
+| Session lifetime | 3 days |
 | Demo dataset | Active duplicate prevented |
-| Upload quota | Storage-based |
 | Upload storage | 10 MB per session |
 | File-size safety limit | 5 MB per file |
-| Successful analysis runs | 8 per session |
+| Successful analyses | 8 per session |
 | Dashboard cards | 8 per session |
-| Charts per analysis | Prefer 1, max 3 |
-| Dashboard | 1 dashboard per session |
-| Reset | Clears workspace data but preserves public quota usage |
-| Delete | Does not restore used quota |
-| Expired sessions | Cleaned up opportunistically / by cleanup flow |
+| Charts | Prefer 1, max 3 per analysis |
+| Dashboard | 1 per session |
+
+Reset, delete, and remove actions clear visible workspace data but do not restore used quota. Expired sessions are cleaned up opportunistically / by cleanup flow.
 
 ## Supported Uploads
 
-- CSV only in the current MVP.
-- UTF-8 CSV with a header row.
-- File validation checks type, size, headers, row parseability, Snowflake-safe names, and storage quota.
-- Upload success requires S3 and Snowflake readiness.
-- Uploaded CSV modeling is conservative and may need clear semantic mappings before transformation.
+| Supported public upload | Limit |
+|---|---|
+| CSV with header row | 5 MB per file, 10 MB total upload storage per session |
+
+Upload success requires file validation, storage quota, S3 readiness, and Snowflake readiness.
+
+## Deployment
+
+Planned deployment:
+
+| Target | Root / Service | Notes |
+|---|---|---|
+| Vercel | `frontend/` | Configure `NEXT_PUBLIC_API_BASE_URL` for the deployed Render API. |
+| Render | `backend/` | Configure Supabase PostgreSQL, S3, Snowflake, dbt, AI providers, CORS, and demo quotas. |
+| Supabase PostgreSQL | external | Metadata database only; not analytical execution. |
+| AWS S3 | external | Raw file storage under session-scoped keys. |
+| Snowflake | external | Warehouse Raw tables, dbt models, Data Marts, and analysis queries. |
+
+Hosted URLs will be added only after deployment is complete and verified.
 
 ## Project Structure
 
@@ -184,38 +195,25 @@ MeshFlow/
   backend/                  FastAPI API, services, SQLAlchemy models, Alembic, tests
   frontend/                 Next.js app, workspace UI, Recharts components
   docs/scopian/sources/     Canonical product, architecture, API, UX, and data specs
+  README.md
 ```
 
-Local-only folders such as `docs/prompts/`, `docs/progress/`, `docs/audit/`, and `_reference/` are ignored and should not be committed. Backend and frontend install separately; there is no root app package manager.
+There is intentionally no root app package manager. Install and run backend and frontend from their own folders. Local prompt/progress/audit/reference folders are intentionally untracked.
 
 ## Local Development
 
-### Backend
+Backend setup:
 
 ```powershell
 cd backend
 py -3.11 -m venv .venv-dbt
 .\.venv-dbt\Scripts\python.exe -m pip install -r requirements.txt -r requirements-dev.txt
 Copy-Item .env.example .env
-.\.venv-dbt\Scripts\alembic.exe upgrade head
+.\.venv-dbt\Scripts\python.exe -m alembic upgrade head
 .\.venv-dbt\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-dbt runtime note:
-
-- Current live dbt smoke was verified with Python 3.11 and `backend/.venv-dbt`.
-- dbt 1.11 did not run under Python 3.14 locally because of dependency compatibility.
-- Use a Python version compatible with dbt 1.11 for live dbt execution.
-- Runtime compatibility failures should report setup-required/failed states, not fake dbt success.
-
-Quick dbt check:
-
-```powershell
-cd backend
-.\.venv-dbt\Scripts\dbt.exe --version
-```
-
-### Frontend
+Frontend setup:
 
 ```powershell
 cd frontend
@@ -226,53 +224,31 @@ npm run dev
 
 Default local URLs:
 
-```text
-Frontend: http://localhost:3000
-Backend API: http://localhost:8000/api/v1
-```
+- Frontend: `http://localhost:3000`
+- Backend API: `http://localhost:8000/api/v1`
 
-## Environment Checklist
+Environment examples:
 
-Backend categories:
+- Backend: `backend/.env.example`
+- Frontend: `frontend/.env.example`
+- Root `.env.example`: pointer only
 
-- `DATABASE_URL`
-- app environment, debug, version, and CORS origins
-- demo session retention and quota settings
-- AWS S3 bucket, upload prefix, region, and credentials
-- Snowflake account, user, password, role, warehouse, database, schema, and stage
-- dbt runtime directories, target, and threads
-- Gemini provider keys and model names
-- OpenAI provider key and model name
-
-Frontend:
-
-- `NEXT_PUBLIC_API_BASE_URL`
-
-Do not commit `.env` files, provider keys, warehouse credentials, or storage credentials.
-
-## Status
-
-Current validation status:
-
-- Backend automated tests have passed locally.
-- Frontend typecheck, lint, and production build have passed locally.
-- Live local smoke has passed against configured AWS S3 and Snowflake for raw upload/load.
-- Live dbt transformation has passed through Staging, Intermediate, Dimensional Model, and Data Marts.
-- Live OpenAI analysis planning, Snowflake analytical SELECT, ChartSpec generation, Gemini insight generation, dashboard card persistence, and cleanup have been validated locally.
-- Hosted deployment is not included yet.
+Use a Python version compatible with dbt 1.11 for live dbt execution. The local dbt-compatible runtime has been verified with Python 3.11.
 
 ## Safety And Boundaries
 
-- No fake success paths.
-- No local analytics execution.
-- Provider keys and raw secrets are not exposed to the frontend.
-- Provider output is not trusted until backend validation passes.
+- Demo project, not production SaaS.
+- No auth, teams, billing, or sensitive-data support.
+- No DuckDB, local analytics execution, or fake success fallback.
+- Backend owns secrets; frontend receives only public API configuration.
+- Provider keys, raw provider payloads, warehouse credentials, and storage credentials are not exposed to the frontend.
 - Public reset clears workspace data but preserves quota usage.
-- Delete/reset do not restore used quota.
-- Dashboard and history use stored snapshots.
-- External cleanup is best-effort and reports completed, skipped, not configured, or failed statuses honestly.
-- This is not production SaaS, auth, billing, team-account, or multi-tenant scope.
+- External cleanup is best-effort and reports completed, skipped, not configured, or failed states honestly.
+
+## Status
+
+MeshFlow has passed local automated checks and local smoke validation with configured Supabase PostgreSQL, AWS S3, Snowflake, dbt, Gemini, and OpenAI services. Hosted deployment is planned but not listed as complete.
 
 ## License
 
-No license file is currently present.
+No license file is present.
