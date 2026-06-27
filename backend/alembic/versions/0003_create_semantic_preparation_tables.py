@@ -1,6 +1,6 @@
 """create semantic preparation tables
 
-Revision ID: 0003_create_semantic_preparation_tables
+Revision ID: 0003_semantic_prep
 Revises: 0002_create_dataset_upload_tables
 Create Date: 2026-06-16 00:00:00.000000
 """
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "0003_create_semantic_preparation_tables"
-down_revision: str | None = "0002_create_dataset_upload_tables"
+revision: str = "0003_semantic_prep"
+down_revision: str | None = "0002_dataset_upload"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

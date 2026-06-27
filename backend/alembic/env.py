@@ -8,7 +8,7 @@ from app.db.base import Base
 from app.models import ColumnProfile, Dataset, DatasetFile, DemoSession
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", settings.sqlalchemy_database_url)
 
 _ = ColumnProfile, Dataset, DatasetFile, DemoSession
 

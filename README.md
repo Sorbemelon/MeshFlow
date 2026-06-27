@@ -6,7 +6,7 @@
 
 MeshFlow is a warehouse-first AI analytics engineering demo workspace that turns raw datasets into Snowflake/dbt-backed data flows, dimensional models, Data Marts, AI-generated analysis runs, Recharts dashboards, insights, and evidence.
 
-It is a portfolio-grade demo project, not a production SaaS. Successful data processing uses real AWS S3, Snowflake, and dbt. MeshFlow does not use DuckDB, local fake analytics execution, mock dbt success, or fake successful AI fallback paths.
+It is a portfolio-grade demo project, not a production SaaS. Successful data processing uses real AWS S3, Snowflake, and dbt.
 
 <p>
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?style=flat-square" />
@@ -264,7 +264,7 @@ Current validation status:
 ## Safety And Boundaries
 
 - No fake success paths.
-- No DuckDB or local analytics execution.
+- No local analytics execution.
 - Provider keys and raw secrets are not exposed to the frontend.
 - Provider output is not trusted until backend validation passes.
 - Public reset clears workspace data but preserves quota usage.

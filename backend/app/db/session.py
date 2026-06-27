@@ -23,12 +23,14 @@ def _connect_args(database_url: str) -> dict[str, object]:
     return {}
 
 
-_ensure_sqlite_parent_dir(settings.database_url)
+database_url = settings.sqlalchemy_database_url
+
+_ensure_sqlite_parent_dir(database_url)
 
 engine = create_engine(
-    settings.database_url,
+    database_url,
     pool_pre_ping=True,
-    connect_args=_connect_args(settings.database_url),
+    connect_args=_connect_args(database_url),
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, class_=Session)

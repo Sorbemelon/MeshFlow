@@ -1,6 +1,6 @@
 """create dashboard cards
 
-Revision ID: 0008_create_dashboard_cards
+Revision ID: 0008_dashboard_cards
 Revises: 0007_create_analysis_insights
 Create Date: 2026-06-16 00:00:00.000000
 """
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "0008_create_dashboard_cards"
-down_revision: str | None = "0007_create_analysis_insights"
+revision: str = "0008_dashboard_cards"
+down_revision: str | None = "0007_insights"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

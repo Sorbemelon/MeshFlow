@@ -1,6 +1,6 @@
 """create dataset upload tables
 
-Revision ID: 0002_create_dataset_upload_tables
+Revision ID: 0002_dataset_upload
 Revises: 0001_create_demo_sessions
 Create Date: 2026-06-16 00:00:00.000000
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "0002_create_dataset_upload_tables"
+revision: str = "0002_dataset_upload"
 down_revision: str | None = "0001_create_demo_sessions"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

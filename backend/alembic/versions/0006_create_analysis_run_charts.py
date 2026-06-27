@@ -1,6 +1,6 @@
 """create analysis run charts
 
-Revision ID: 0006_create_analysis_run_charts
+Revision ID: 0006_analysis_charts
 Revises: 0005_create_analysis_run_tables
 Create Date: 2026-06-16 00:00:00.000000
 """
@@ -11,8 +11,8 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "0006_create_analysis_run_charts"
-down_revision: str | None = "0005_create_analysis_run_tables"
+revision: str = "0006_analysis_charts"
+down_revision: str | None = "0005_analysis_runs"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
