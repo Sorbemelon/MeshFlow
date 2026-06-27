@@ -17,11 +17,10 @@ from app.models import DemoSession
 
 @pytest.fixture(autouse=True)
 def isolate_live_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep unit tests from using real local .env credentials or reset flags."""
+    """Keep unit tests from using real local .env credentials."""
 
     safe_overrides = {
         "app_env": "test",
-        "allow_demo_reset_usage": False,
         "aws_region": None,
         "s3_bucket_name": None,
         "aws_access_key_id": None,

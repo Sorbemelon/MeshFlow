@@ -23,14 +23,17 @@ import {
   type StructuredApiError,
 } from "@/lib/meshflowApi";
 import {
+  clearStoredDemoSessionReset,
   clearStoredDemoSessionId,
   getStoredDemoSessionId,
+  isStoredDemoSessionReset,
   storeDemoSessionId,
 } from "@/lib/demoSessionStorage";
 
 type LandingSessionState =
   | "checking"
   | "no_session"
+  | "reset_ready"
   | "active"
   | "expired"
   | "backend_unavailable";
@@ -61,6 +64,25 @@ const iconProps = {
   strokeLinejoin: "round" as const,
   "aria-hidden": true as const,
 };
+
+function InlineSpinner() {
+  return (
+    <svg
+      width={17}
+      height={17}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden
+      className="animate-spin"
+    >
+      <path d="M16 5.5A7 7 0 1 0 17 10" />
+      <path d="M16 3v3h-3" />
+    </svg>
+  );
+}
 
 function asApiError(error: unknown): StructuredApiError {
   if (error instanceof MeshFlowApiError) {
@@ -122,8 +144,18 @@ export function LandingSessionProvider({
 
     try {
       const response = await getCurrentDemoSession(storedSessionId);
+      if (response.session.status === "reset") {
+        setSession(response.session);
+        setSessionState("reset_ready");
+        setBackendState("available");
+        setError(null);
+        return;
+      }
+
       setSession(response.session);
-      setSessionState("active");
+      setSessionState(
+        isStoredDemoSessionReset(response.session.id) ? "reset_ready" : "active",
+      );
       setBackendState("available");
       setError(null);
     } catch (caught) {
@@ -179,10 +211,27 @@ export function LandingSessionProvider({
 
     try {
       const workspace = await getWorkspace(storedSessionId);
+      const wasReset = isStoredDemoSessionReset(workspace.session.id);
+      if (workspace.session.status === "reset") {
+        clearStoredDemoSessionReset();
+        setSession(workspace.session);
+        setSessionState("active");
+        setBackendState("available");
+        router.push("/demo/upload");
+        return;
+      }
+
+      clearStoredDemoSessionReset();
       setSession(workspace.session);
       setSessionState("active");
       setBackendState("available");
-      router.push(workspace.dashboard.cards.length > 0 ? "/demo/dashboard" : "/demo/upload");
+      router.push(
+        wasReset
+          ? "/demo/upload"
+          : workspace.dashboard.cards.length > 0
+            ? "/demo/dashboard"
+            : "/demo/upload",
+      );
     } catch (caught) {
       const apiError = asApiError(caught);
       setError(apiError);
@@ -266,11 +315,11 @@ export function LandingStatusBadges() {
     <>
       <span className="hidden items-center gap-1.5 rounded-full border border-shell-border bg-shell/55 px-2.5 py-1 sm:inline-flex">
         <span className="text-xs font-medium text-slate-300">Demo</span>
-        <StatusBadge status={demoBadge.status} label={demoBadge.label} />
+        <StatusBadge status={demoBadge.status} label={demoBadge.label} showIcon={false} />
       </span>
       <span className="inline-flex items-center gap-1.5 rounded-full border border-shell-border bg-shell/55 px-2.5 py-1">
         <span className="text-xs font-medium text-slate-300">Backend</span>
-        <StatusBadge status={backendBadge.status} label={backendBadge.label} />
+        <StatusBadge status={backendBadge.status} label={backendBadge.label} showIcon={false} />
       </span>
     </>
   );
@@ -283,6 +332,7 @@ export function LandingDemoAction() {
     error,
     isBusy,
     retry,
+    session,
     sessionState,
     startSession,
   } = useLandingSession();
@@ -292,11 +342,13 @@ export function LandingDemoAction() {
       ? "Checking..."
       : sessionState === "active"
         ? "Continue Session"
-        : sessionState === "expired"
-          ? "Start New Session"
-          : backendState === "unavailable"
-            ? "Retry Backend"
-            : "Launch Demo";
+        : sessionState === "reset_ready"
+          ? "Launch Demo"
+          : sessionState === "expired"
+            ? "Start New Session"
+            : backendState === "unavailable"
+              ? "Retry Backend"
+              : "Launch Demo";
 
   async function handleClick() {
     if (isBusy || sessionState === "checking") {
@@ -308,7 +360,12 @@ export function LandingDemoAction() {
       return;
     }
 
-    if (sessionState === "active") {
+    if (sessionState === "active" || sessionState === "reset_ready") {
+      if (session?.status === "reset") {
+        await continueSession();
+        return;
+      }
+
       await continueSession();
       return;
     }
@@ -324,11 +381,15 @@ export function LandingDemoAction() {
           onClick={() => void handleClick()}
           disabled={isBusy || sessionState === "checking"}
         >
-          <svg {...iconProps}>
-            <path d="M5 5.5A2.5 2.5 0 0 1 7.5 3h4.8a2 2 0 0 1 1.4.6L19.4 9a2 2 0 0 1 .6 1.4v6.1a2.5 2.5 0 0 1-2.5 2.5h-10A2.5 2.5 0 0 1 5 16.5v-11z" />
-            <path d="M13 3v5a2 2 0 0 0 2 2h5" />
-            <path d="M9 14h6M12 11v6" />
-          </svg>
+          {isBusy || sessionState === "checking" ? (
+            <InlineSpinner />
+          ) : (
+            <svg {...iconProps}>
+              <path d="M5 5.5A2.5 2.5 0 0 1 7.5 3h4.8a2 2 0 0 1 1.4.6L19.4 9a2 2 0 0 1 .6 1.4v6.1a2.5 2.5 0 0 1-2.5 2.5h-10A2.5 2.5 0 0 1 5 16.5v-11z" />
+              <path d="M13 3v5a2 2 0 0 0 2 2h5" />
+              <path d="M9 14h6M12 11v6" />
+            </svg>
+          )}
           {label}
         </Button>
         <p className="whitespace-nowrap text-sm text-slate-400">

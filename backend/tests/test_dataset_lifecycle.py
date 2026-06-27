@@ -277,7 +277,6 @@ def test_delete_dataset_does_not_decrement_usage(
     session_id = create_session(client)
     dataset = create_dataset(db_session, session_id)
     session = db_session.get(DemoSession, session_id)
-    session.demo_dataset_used = 1
     session.uploaded_datasets_used = 1
     session.successful_analysis_runs_used = 3
     session.dashboard_cards_used = 2
@@ -287,7 +286,7 @@ def test_delete_dataset_does_not_decrement_usage(
     limits = client.get("/api/v1/limits", headers={DEMO_SESSION_HEADER: session_id}).json()
 
     assert response.status_code == 200
-    assert limits["usage"]["demo_dataset_used"] == 1
+    assert "demo_dataset_used" not in limits["usage"]
     assert limits["usage"]["uploaded_datasets_used"] == 1
     assert limits["usage"]["successful_analysis_runs_used"] == 3
     assert limits["usage"]["dashboard_cards_used"] == 2
@@ -371,7 +370,6 @@ def test_reset_clears_visible_workspace_without_restoring_usage(
     run = create_analysis_with_chart(db_session, session_id, dataset)
     create_dashboard_card(client, session_id, run.id)
     session = db_session.get(DemoSession, session_id)
-    session.demo_dataset_used = 1
     session.successful_analysis_runs_used = 1
     db_session.commit()
 
@@ -391,7 +389,7 @@ def test_reset_clears_visible_workspace_without_restoring_usage(
     assert body["workspace_cleared"] is True
     assert body["usage_reset"] is False
     assert body["quota_restored"] is False
-    assert body["usage"]["demo_dataset_used"] == 1
+    assert "demo_dataset_used" not in body["usage"]
     assert body["usage"]["successful_analysis_runs_used"] == 1
     assert workspace.json()["datasets"] == []
     assert workspace.json()["dashboard"]["cards"] == []
@@ -440,7 +438,7 @@ def test_reset_reports_partial_external_cleanup_failure(
     assert cleanup["warnings"]
 
 
-def test_development_reset_can_reset_usage_when_configured(db_session: Session) -> None:
+def test_reset_does_not_restore_usage_even_when_dev_flag_enabled(db_session: Session) -> None:
     now = datetime.now(UTC)
     session = DemoSession(
         status="active",
@@ -454,11 +452,11 @@ def test_development_reset_can_reset_usage_when_configured(db_session: Session) 
 
     from app.services.demo_session_service import reset_demo_session
 
-    response = reset_demo_session(db_session, session.id, Settings(ALLOW_DEMO_RESET_USAGE=True))
+    response = reset_demo_session(db_session, session.id, Settings(_env_file=None))
 
-    assert response.usage_reset is True
-    assert response.quota_restored is True
-    assert response.usage.dashboard_cards_used == 0
+    assert response.usage_reset is False
+    assert response.quota_restored is False
+    assert response.usage.dashboard_cards_used == 4
 
 
 def test_expired_session_cleanup_marks_workspace_metadata_deleted(

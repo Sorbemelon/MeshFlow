@@ -3,7 +3,6 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.models.demo_session import DemoSession
 from app.services.demo_session_service import DEMO_SESSION_HEADER, mark_expired_sessions
 
@@ -129,7 +128,7 @@ def test_limits_endpoint_returns_corrected_public_limits(client: TestClient) -> 
     limits = body["limits"]
     assert body["usage"] is None
     assert limits["retention_days"] == 3
-    assert limits["max_demo_datasets_per_session"] == 1
+    assert "max_demo_datasets_per_session" not in limits
     assert limits["max_upload_file_size_mb"] == 5
     assert limits["max_total_upload_size_mb"] == 10
     assert limits["max_successful_analysis_runs_per_session"] == 8
@@ -142,9 +141,7 @@ def test_limits_endpoint_returns_corrected_public_limits(client: TestClient) -> 
 def test_reset_does_not_reset_usage_by_default(
     client: TestClient,
     db_session: Session,
-    monkeypatch,
 ) -> None:
-    monkeypatch.setattr(settings, "allow_demo_reset_usage", False)
     created = create_session(client)
     session_id = created["session"]["id"]
 
@@ -161,17 +158,24 @@ def test_reset_does_not_reset_usage_by_default(
     assert response.status_code == 200
     body = response.json()
     assert body["usage_reset"] is False
-    assert body["session"]["status"] == "reset"
+    assert body["session"]["status"] == "active"
     assert body["usage"]["successful_analysis_runs_used"] == 4
     assert body["usage"]["dashboard_cards_used"] == 4
 
+    current = client.get(
+        "/api/v1/demo-sessions/current",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
 
-def test_reset_may_reset_usage_when_enabled(
+    assert current.status_code == 200
+    assert current.json()["usage"]["successful_analysis_runs_used"] == 4
+    assert current.json()["usage"]["dashboard_cards_used"] == 4
+
+
+def test_reset_never_restores_usage(
     client: TestClient,
     db_session: Session,
-    monkeypatch,
 ) -> None:
-    monkeypatch.setattr(settings, "allow_demo_reset_usage", True)
     created = create_session(client)
     session_id = created["session"]["id"]
 
@@ -188,10 +192,12 @@ def test_reset_may_reset_usage_when_enabled(
 
     assert response.status_code == 200
     body = response.json()
-    assert body["usage_reset"] is True
-    assert body["usage"]["successful_analysis_runs_used"] == 0
-    assert body["usage"]["dashboard_cards_used"] == 0
-    assert body["usage"]["total_upload_mb_used"] == 0
+    assert body["usage_reset"] is False
+    assert body["quota_restored"] is False
+    assert body["session"]["status"] == "active"
+    assert body["usage"]["successful_analysis_runs_used"] == 3
+    assert body["usage"]["dashboard_cards_used"] == 3
+    assert body["usage"]["total_upload_mb_used"] == 5
 
 
 def test_cleanup_foundation_marks_expired_sessions(db_session: Session) -> None:

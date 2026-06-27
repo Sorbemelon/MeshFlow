@@ -36,9 +36,6 @@ class Settings(BaseSettings):
     demo_session_retention_days: int = Field(
         default=3, alias="DEMO_SESSION_RETENTION_DAYS"
     )
-    max_demo_datasets_per_session: int = Field(
-        default=1, alias="MAX_DEMO_DATASETS_PER_SESSION"
-    )
     max_upload_file_size_mb: int = Field(default=5, alias="MAX_UPLOAD_FILE_SIZE_MB")
     max_total_upload_size_mb: int = Field(default=10, alias="MAX_TOTAL_UPLOAD_SIZE_MB")
     max_successful_analysis_runs_per_session: int = Field(
@@ -49,7 +46,6 @@ class Settings(BaseSettings):
     )
     max_charts_per_analysis: int = Field(default=3, alias="MAX_CHARTS_PER_ANALYSIS")
     dashboards_per_session: int = Field(default=1, alias="DASHBOARDS_PER_SESSION")
-    allow_demo_reset_usage: bool = Field(default=False, alias="ALLOW_DEMO_RESET_USAGE")
 
     # Future phases only.
     aws_region: str | None = Field(default=None, alias="AWS_REGION")

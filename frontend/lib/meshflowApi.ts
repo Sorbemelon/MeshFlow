@@ -14,7 +14,6 @@ export type DemoSessionSummary = {
 
 export type DemoLimits = {
   retention_days: number;
-  max_demo_datasets_per_session: number;
   max_upload_file_size_mb: number;
   max_total_upload_size_mb: number;
   max_successful_analysis_runs_per_session: number;
@@ -22,12 +21,10 @@ export type DemoLimits = {
   preferred_charts_per_analysis: number;
   max_charts_per_analysis: number;
   dashboards_per_session: number;
-  allow_demo_reset_usage: boolean;
 };
 
 export type DemoUsage = {
   successful_uploads_used: number;
-  demo_dataset_used: number;
   uploaded_datasets_used: number;
   successful_analysis_runs_used: number;
   dashboard_cards_used: number;
@@ -377,6 +374,7 @@ export type SemanticPreparationResponse = {
   semantic_columns: SemanticColumnSummary[];
   provider_runs: ProviderRunSummary[];
   next_action: string | null;
+  job_id: string | null;
 };
 
 export type QuestionSuggestionsResponse = {
@@ -433,6 +431,45 @@ export type DbtArtifactSummary = {
   created_at: string;
 };
 
+export type FactModelMetadata = {
+  name: string;
+  grain: string;
+  keys: string[];
+  metrics: string[];
+  date_columns: string[];
+  degenerate_dimensions: string[];
+};
+
+export type DimensionModelMetadata = {
+  name: string;
+  grain: string;
+  key_column: string;
+  columns: string[];
+};
+
+export type MartModelMetadata = {
+  name: string;
+  grain: string;
+  dimensions: string[];
+  metrics: string[];
+  related_dimensions: string[];
+};
+
+export type ModelRelationshipMetadata = {
+  from_model: string;
+  to_model: string;
+  relationship_type: string;
+  join_fields: string[];
+};
+
+export type DatasetModelMetadata = {
+  generated_from: "raw_retail_contract" | "modeling_proposal";
+  fact: FactModelMetadata;
+  dimensions: DimensionModelMetadata[];
+  marts: MartModelMetadata[];
+  relationships: ModelRelationshipMetadata[];
+};
+
 export type DataFlowNodeSummary = {
   id: string;
   node_type: string;
@@ -450,6 +487,14 @@ export type DataFlowEdgeSummary = {
   metadata: Record<string, unknown> | null;
 };
 
+export type RawTablePreviewResponse = {
+  status: "completed" | "not_configured" | "failed";
+  columns: string[];
+  rows: Record<string, unknown>[];
+  row_count_previewed: number;
+  message: string | null;
+};
+
 export type DatasetDataFlowResponse = {
   dataset: DatasetSummary;
   transformation: DatasetTransformationRunSummary | null;
@@ -457,6 +502,8 @@ export type DatasetDataFlowResponse = {
   edges: DataFlowEdgeSummary[];
   artifacts: DbtArtifactSummary[];
   models: Record<string, string[]>;
+  model_metadata: DatasetModelMetadata | null;
+  raw_preview: RawTablePreviewResponse;
   question_suggestions: QuestionSuggestionsResponse;
 };
 
@@ -466,6 +513,7 @@ export type DatasetTransformResponse = {
   transformation_run: DatasetTransformationRunSummary;
   layers_completed: string[];
   models: Record<string, string[]>;
+  model_metadata: DatasetModelMetadata | null;
   next_route: string;
 };
 

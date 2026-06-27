@@ -3,7 +3,6 @@ from pydantic import BaseModel
 
 class DemoLimits(BaseModel):
     retention_days: int
-    max_demo_datasets_per_session: int
     max_upload_file_size_mb: int
     max_total_upload_size_mb: int
     max_successful_analysis_runs_per_session: int
@@ -11,12 +10,10 @@ class DemoLimits(BaseModel):
     preferred_charts_per_analysis: int = 1
     max_charts_per_analysis: int
     dashboards_per_session: int
-    allow_demo_reset_usage: bool
 
 
 class DemoUsage(BaseModel):
     successful_uploads_used: int
-    demo_dataset_used: int
     uploaded_datasets_used: int
     successful_analysis_runs_used: int
     dashboard_cards_used: int

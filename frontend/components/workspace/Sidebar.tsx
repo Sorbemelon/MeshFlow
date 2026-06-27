@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
 import { WordmarkOnDark } from "@/components/brand/Logo";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import { cn } from "@/lib/cn";
 import { DEMO_LIMITS } from "@/lib/demoLimits";
@@ -35,6 +34,51 @@ function formatMegabytes(value: number | null | undefined): string {
     return "0 MB";
   }
   return `${numeric < 1 ? numeric.toFixed(2) : numeric.toFixed(1)} MB`;
+}
+
+function formatSessionDayProgress(
+  expiresAt: string | null | undefined,
+  totalDays: number,
+): string {
+  const fallback = `0/${totalDays} days`;
+  if (!expiresAt) {
+    return fallback;
+  }
+
+  const expiresTime = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresTime)) {
+    return fallback;
+  }
+
+  const remainingMs = expiresTime - Date.now();
+  if (remainingMs <= 0) {
+    return `0/${totalDays} days`;
+  }
+
+  const daysRemaining = Math.min(
+    Math.max(Math.ceil(remainingMs / (1000 * 60 * 60 * 24)), 0),
+    totalDays,
+  );
+  return `${daysRemaining}/${totalDays} days`;
+}
+
+function SidebarSpinner() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden
+      className="animate-spin"
+    >
+      <path d="M16 5.5A7 7 0 1 0 17 10" />
+      <path d="M16 3v3h-3" />
+    </svg>
+  );
 }
 
 const NAV: NavItem[] = [
@@ -94,77 +138,72 @@ const NAV: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const [resetStarted, setResetStarted] = useState(false);
   const {
     backendStatus,
     limits,
-    resetMessage,
     resetSession,
     sessionStatus,
     usage,
     workspace,
     isResetting,
+    isAnyProcessRunning,
+    activeProcessLabel,
   } = useWorkspaceSession();
-
-  const sessionBadge =
-    sessionStatus === "active"
-      ? {
-          status: "ready" as const,
-          label: workspace?.session.status === "reset" ? "Reset" : "Active",
-        }
-      : sessionStatus === "checking"
-        ? { status: "running" as const, label: "Checking" }
-        : sessionStatus === "expired"
-          ? { status: "failed" as const, label: "Expired" }
-          : { status: "waiting" as const, label: "No session" };
 
   const usageItems = [
     {
-      label: "Session",
-      value: `${limits?.retention_days ?? 3} days`,
+      label: "Time left",
+      value: formatSessionDayProgress(
+        workspace?.session.expires_at,
+        limits?.retention_days ?? 3,
+      ),
     },
     {
-      label: "Storage",
+      label: "Upload",
       value: `${formatMegabytes(usage?.total_upload_mb_used)} / ${
         limits?.max_total_upload_size_mb ?? DEMO_LIMITS.totalUploadSizeMb
       } MB`,
     },
     {
-      label: "Demo data",
-      value: `${usage?.demo_dataset_used ?? 0} / ${
-        limits?.max_demo_datasets_per_session ?? DEMO_LIMITS.demoDatasetPerSession
-      }`,
-    },
-    {
-      label: "Analyses",
+      label: "Analysis",
       value: `${usage?.successful_analysis_runs_used ?? 0} / ${
         limits?.max_successful_analysis_runs_per_session ??
         DEMO_LIMITS.successfulAnalysisRunsPerSession
       }`,
     },
     {
-      label: "Cards",
+      label: "Charts",
       value: `${usage?.dashboard_cards_used ?? 0} / ${
         limits?.max_dashboard_cards_per_session ??
-        DEMO_LIMITS.dashboardCardsPerSession
+        DEMO_LIMITS.chartsPerSession
       }`,
     },
   ];
 
-  const canReset = sessionStatus === "active" && backendStatus === "available";
+  const resetPending = isResetting || resetStarted;
+  const canReset =
+    sessionStatus === "active" &&
+    backendStatus === "available" &&
+    !resetPending &&
+    !isAnyProcessRunning;
 
-  async function handleReset() {
+  function handleReset() {
     if (!canReset) {
       return;
     }
 
     const confirmed = window.confirm(
-      "Reset workspace metadata? Public quota usage is not restored unless backend development reset usage is enabled.",
+      "Reset workspace metadata? Public quota usage is not restored.",
     );
     if (!confirmed) {
       return;
     }
 
-    await resetSession();
+    setResetStarted(true);
+    void resetSession();
+    router.push("/");
   }
 
   return (
@@ -221,11 +260,7 @@ export function Sidebar() {
 
       {/* Session footer */}
       <div className="mt-auto hidden border-t border-shell-border px-4 py-4 md:block">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-slate-400">Session</span>
-          <StatusBadge status={sessionBadge.status} label={sessionBadge.label} />
-        </div>
-        <div className="mt-3 rounded-lg border border-shell-border bg-shell/55 p-3">
+        <div className="rounded-lg border border-shell-border bg-shell/55 p-3">
           <p className="text-xs font-semibold text-slate-300">Demo limits</p>
           <div className="mt-2 grid gap-1.5">
             {usageItems.map((limit) => (
@@ -244,24 +279,30 @@ export function Sidebar() {
             Public quota counts successful use and is not restored by
             delete/reset.
           </p>
-          {resetMessage ? (
-            <p className="mt-2 text-[0.6875rem] leading-relaxed text-indigo-200">
-              {resetMessage}
-            </p>
-          ) : null}
         </div>
         <button
           type="button"
-          disabled={!canReset || isResetting}
+          disabled={!canReset}
           onClick={() => void handleReset()}
           title={
-            canReset
-              ? "Reset workspace metadata. Public quota usage is not restored by default."
+            resetPending
+              ? "Reset is running. Returning to the landing page."
+              : isAnyProcessRunning
+              ? `Wait for the current process to finish: ${activeProcessLabel}.`
+              : canReset
+              ? "Reset workspace metadata. Public quota usage is not restored."
               : "Available once a backend-backed session is active."
           }
           className="mt-3 w-full rounded-md border border-shell-border px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-shell/70 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isResetting ? "Resetting..." : "Reset Demo"}
+          {resetPending ? (
+            <span className="inline-flex items-center justify-center gap-2">
+              <SidebarSpinner />
+              Resetting...
+            </span>
+          ) : (
+            "Reset Demo"
+          )}
         </button>
       </div>
     </aside>

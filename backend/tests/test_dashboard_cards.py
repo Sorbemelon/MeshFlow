@@ -251,6 +251,66 @@ def test_delete_card_removes_visible_card_without_restoring_quota(
     assert db_session.get(DemoSession, session_id).dashboard_cards_used == 1
 
 
+def test_readding_archived_result_group_restores_card_without_incrementing_quota(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    session_id = create_session(client)
+    run = create_analysis_with_chart(db_session, session_id)
+    card_id = post_dashboard_card(client, session_id, run.id).json()["card"]["id"]
+    client.delete(
+        f"/api/v1/dashboard/cards/{card_id}",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+
+    response = post_dashboard_card(client, session_id, run.id)
+    dashboard_response = client.get(
+        "/api/v1/dashboard",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created"] is False
+    assert body["card"]["id"] == card_id
+    assert body["card"]["status"] == "active"
+    assert body["cards_used"] == 1
+    assert "not used again" in body["message"]
+    assert [card["id"] for card in dashboard_response.json()["cards"]] == [card_id]
+    db_session.expire_all()
+    card = db_session.get(DashboardCard, card_id)
+    assert card.status == "active"
+    assert card.archived_at is None
+    assert db_session.get(DemoSession, session_id).dashboard_cards_used == 1
+
+
+def test_readding_archived_result_group_is_allowed_at_card_limit(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    session_id = create_session(client)
+    run = create_analysis_with_chart(db_session, session_id)
+    card_id = post_dashboard_card(client, session_id, run.id).json()["card"]["id"]
+    client.delete(
+        f"/api/v1/dashboard/cards/{card_id}",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+    session = db_session.get(DemoSession, session_id)
+    session.dashboard_cards_used = 8
+    db_session.commit()
+
+    response = post_dashboard_card(client, session_id, run.id)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["created"] is False
+    assert body["card"]["id"] == card_id
+    assert body["card"]["status"] == "active"
+    assert body["cards_used"] == 8
+    db_session.expire_all()
+    assert db_session.get(DemoSession, session_id).dashboard_cards_used == 8
+
+
 def test_reset_archives_visible_cards_without_restoring_quota_by_default(
     client: TestClient,
     db_session: Session,
@@ -275,7 +335,7 @@ def test_reset_archives_visible_cards_without_restoring_quota_by_default(
     assert db_session.get(DemoSession, session_id).dashboard_cards_used == 1
 
 
-def test_development_reset_can_reset_usage_when_configured(
+def test_reset_does_not_restore_card_quota_even_when_dev_flag_enabled(
     client: TestClient,
     db_session: Session,
 ) -> None:
@@ -287,10 +347,12 @@ def test_development_reset_can_reset_usage_when_configured(
     response = reset_demo_session(
         db_session,
         session_id,
-        Settings(ALLOW_DEMO_RESET_USAGE=True),
+        Settings(_env_file=None),
     )
 
-    assert response.usage.dashboard_cards_used == 0
+    assert response.usage_reset is False
+    assert response.quota_restored is False
+    assert response.usage.dashboard_cards_used == 3
 
 
 def test_dashboard_card_quota_blocks_ninth_card(
@@ -447,6 +509,48 @@ def test_reused_analysis_with_existing_card_returns_card_without_incrementing_qu
     session = db_session.get(DemoSession, session_id)
     assert session.successful_analysis_runs_used == 1
     assert session.dashboard_cards_used == 1
+
+
+def test_reused_analysis_with_archived_card_restores_without_incrementing_quota(
+    client: TestClient,
+    db_session: Session,
+    monkeypatch,
+) -> None:
+    patch_analysis_success(monkeypatch)
+    session_id = create_session(client)
+    dataset = create_ready_dataset(db_session, session_id)
+    first = post_saved_analysis(client, session_id, dataset.id).json()
+    first_card_id = first["saved_dashboard_card"]["id"]
+    client.delete(
+        f"/api/v1/dashboard/cards/{first_card_id}",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+    session = db_session.get(DemoSession, session_id)
+    session.dashboard_cards_used = 8
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.services.analysis_run_service.call_openai_provider",
+        lambda candidate, prompt, temperature: (_ for _ in ()).throw(
+            AssertionError("provider should not be called for reuse")
+        ),
+    )
+    second_response = post_saved_analysis(client, session_id, dataset.id)
+
+    assert second_response.status_code == 200
+    second = second_response.json()
+    assert second["reused"] is True
+    assert second["saved_dashboard_card"]["id"] == first_card_id
+    assert second["saved_dashboard_card"]["status"] == "active"
+    assert second["dashboard_card_created"] is False
+    assert "not used again" in second["dashboard_card_message"]
+    db_session.expire_all()
+    session = db_session.get(DemoSession, session_id)
+    card = db_session.get(DashboardCard, first_card_id)
+    assert session.successful_analysis_runs_used == 1
+    assert session.dashboard_cards_used == 8
+    assert card.status == "active"
+    assert card.archived_at is None
 
 
 def test_workspace_and_limits_reflect_persisted_cards_after_delete(

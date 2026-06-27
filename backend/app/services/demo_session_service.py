@@ -40,7 +40,6 @@ def as_utc(value: datetime) -> datetime:
 def configured_limits(config: Settings = settings) -> DemoLimits:
     return DemoLimits(
         retention_days=config.demo_session_retention_days,
-        max_demo_datasets_per_session=config.max_demo_datasets_per_session,
         max_upload_file_size_mb=config.max_upload_file_size_mb,
         max_total_upload_size_mb=config.max_total_upload_size_mb,
         max_successful_analysis_runs_per_session=(
@@ -49,14 +48,12 @@ def configured_limits(config: Settings = settings) -> DemoLimits:
         max_dashboard_cards_per_session=config.max_dashboard_cards_per_session,
         max_charts_per_analysis=config.max_charts_per_analysis,
         dashboards_per_session=config.dashboards_per_session,
-        allow_demo_reset_usage=config.allow_demo_reset_usage,
     )
 
 
 def usage_from_session(session: DemoSession) -> DemoUsage:
     return DemoUsage(
         successful_uploads_used=session.successful_uploads_used,
-        demo_dataset_used=session.demo_dataset_used,
         uploaded_datasets_used=session.uploaded_datasets_used,
         successful_analysis_runs_used=session.successful_analysis_runs_used,
         dashboard_cards_used=session.dashboard_cards_used,
@@ -250,7 +247,7 @@ def reset_demo_session(
     config: Settings = settings,
 ) -> DemoSessionResetResponse:
     session = get_required_session(db, session_id)
-    session.status = "reset"
+    session.status = "active"
     session.reset_at = utc_now()
 
     from app.services.cleanup_service import clear_session_workspace
@@ -258,24 +255,11 @@ def reset_demo_session(
     cleanup = clear_session_workspace(db, session, config)
 
     usage_reset = False
-    if config.allow_demo_reset_usage:
-        session.successful_uploads_used = 0
-        session.demo_dataset_used = 0
-        session.uploaded_datasets_used = 0
-        session.successful_analysis_runs_used = 0
-        session.dashboard_cards_used = 0
-        session.total_upload_mb_used = 0.0
-        usage_reset = True
 
     db.commit()
     db.refresh(session)
 
-    message = (
-        "Demo workspace metadata reset and usage counters reset because development "
-        "reset usage is enabled."
-        if usage_reset
-        else "Demo workspace metadata reset. Usage counters were not reset."
-    )
+    message = "Demo workspace metadata reset. Usage counters were not reset."
 
     return DemoSessionResetResponse(
         session=summary_from_session(session, config),

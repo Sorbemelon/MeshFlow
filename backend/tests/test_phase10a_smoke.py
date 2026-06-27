@@ -28,7 +28,6 @@ def _force_missing_external_config(monkeypatch) -> None:
         "gemini_model_2",
     ):
         monkeypatch.setattr(settings, name, None)
-    monkeypatch.setattr(settings, "allow_demo_reset_usage", False)
 
 
 def test_phase10a_no_credentials_api_smoke(
