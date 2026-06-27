@@ -283,7 +283,7 @@ export function Sidebar() {
         <button
           type="button"
           disabled={!canReset}
-          onClick={() => void handleReset()}
+          onClick={handleReset}
           title={
             resetPending
               ? "Reset is running. Returning to the landing page."

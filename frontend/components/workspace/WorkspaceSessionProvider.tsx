@@ -33,9 +33,13 @@ import {
   type WorkspaceResponse,
 } from "@/lib/meshflowApi";
 import {
+  clearStoredDemoSessionResetFailure,
   clearStoredDemoSessionReset,
+  clearStoredDemoSessionResetPending,
   clearStoredDemoSessionId,
   getStoredDemoSessionId,
+  markStoredDemoSessionResetFailed,
+  markStoredDemoSessionResetPending,
   markStoredDemoSessionReset,
   storeDemoSessionId,
 } from "@/lib/demoSessionStorage";
@@ -260,13 +264,15 @@ export function WorkspaceSessionProvider({
 
     setIsResetting(true);
     setResetMessage(null);
-    markStoredDemoSessionReset(activeSessionId);
+    markStoredDemoSessionResetPending(activeSessionId);
+    clearStoredDemoSessionResetFailure();
     setSessionId(activeSessionId);
     setWorkspace(null);
     setSessionStatus("active");
 
     try {
       const response = await resetDemoSession(activeSessionId);
+      markStoredDemoSessionReset(activeSessionId);
       setLimits(response.limits);
       setUsage(response.usage);
       setResetMessage(null);
@@ -275,7 +281,9 @@ export function WorkspaceSessionProvider({
       return response;
     } catch (caught) {
       clearStoredDemoSessionReset();
+      clearStoredDemoSessionResetPending();
       const apiError = asApiError(caught);
+      markStoredDemoSessionResetFailed(activeSessionId, apiError.message);
       setError(apiError);
       setBackendStatus(
         apiError.error_code === "BACKEND_UNAVAILABLE" ? "unavailable" : "available",

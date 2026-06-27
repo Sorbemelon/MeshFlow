@@ -14,19 +14,22 @@ import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   createDemoSession,
-  getCurrentDemoSession,
   getLimits,
   getWorkspace,
   isSessionInvalidError,
   MeshFlowApiError,
   type DemoSessionSummary,
   type StructuredApiError,
+  type WorkspaceResponse,
 } from "@/lib/meshflowApi";
 import {
+  clearStoredDemoSessionResetFailure,
   clearStoredDemoSessionReset,
   clearStoredDemoSessionId,
+  getStoredDemoSessionResetFailure,
   getStoredDemoSessionId,
   isStoredDemoSessionReset,
+  isStoredDemoSessionResetPending,
   storeDemoSessionId,
 } from "@/lib/demoSessionStorage";
 
@@ -34,6 +37,8 @@ type LandingSessionState =
   | "checking"
   | "no_session"
   | "reset_ready"
+  | "resetting"
+  | "reset_failed"
   | "active"
   | "expired"
   | "backend_unavailable";
@@ -97,6 +102,15 @@ function asApiError(error: unknown): StructuredApiError {
   };
 }
 
+function hasWorkspaceContent(workspace: WorkspaceResponse): boolean {
+  return (
+    workspace.datasets.length > 0 ||
+    workspace.ready_datasets.length > 0 ||
+    workspace.dashboard.cards.length > 0 ||
+    workspace.history.analysis_runs.length > 0
+  );
+}
+
 function useLandingSession() {
   const value = useContext(LandingSessionContext);
   if (!value) {
@@ -140,22 +154,46 @@ export function LandingSessionProvider({
       return;
     }
 
+    if (isStoredDemoSessionResetPending(storedSessionId)) {
+      setSession(null);
+      setSessionState("resetting");
+      setBackendState("checking");
+      setError(null);
+      return;
+    }
+
+    const resetFailure = getStoredDemoSessionResetFailure(storedSessionId);
+    if (resetFailure) {
+      setSession(null);
+      setSessionState("reset_failed");
+      setBackendState("available");
+      setError({
+        error_code: "RESET_FAILED",
+        failed_step: "demo_reset",
+        message: resetFailure,
+        next_action: "Check backend status, then retry the demo reset.",
+      });
+      return;
+    }
+
     setSessionState("checking");
 
     try {
-      const response = await getCurrentDemoSession(storedSessionId);
-      if (response.session.status === "reset") {
-        setSession(response.session);
+      const workspace = await getWorkspace(storedSessionId);
+      const resetOrEmptyWorkspace =
+        workspace.session.status === "reset" ||
+        isStoredDemoSessionReset(workspace.session.id) ||
+        !hasWorkspaceContent(workspace);
+
+      setSession(workspace.session);
+      if (resetOrEmptyWorkspace) {
         setSessionState("reset_ready");
         setBackendState("available");
         setError(null);
         return;
       }
 
-      setSession(response.session);
-      setSessionState(
-        isStoredDemoSessionReset(response.session.id) ? "reset_ready" : "active",
-      );
+      setSessionState("active");
       setBackendState("available");
       setError(null);
     } catch (caught) {
@@ -260,6 +298,18 @@ export function LandingSessionProvider({
     return () => window.clearTimeout(timeoutId);
   }, [validateStoredSession]);
 
+  useEffect(() => {
+    if (sessionState !== "resetting") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void validateStoredSession();
+    }, 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, [sessionState, validateStoredSession]);
+
   const value = useMemo<LandingContextValue>(
     () => ({
       session,
@@ -296,13 +346,17 @@ export function LandingStatusBadges() {
   const demoBadge =
     sessionState === "active"
       ? { status: "ready" as const, label: "Active" }
-      : sessionState === "checking"
-        ? { status: "running" as const, label: "Checking" }
-        : sessionState === "expired"
-          ? { status: "failed" as const, label: "Expired" }
-          : sessionState === "backend_unavailable"
-            ? { status: "review" as const, label: "Session unknown" }
-            : { status: "waiting" as const, label: "No session" };
+      : sessionState === "resetting"
+        ? { status: "running" as const, label: "Resetting" }
+        : sessionState === "reset_failed"
+          ? { status: "failed" as const, label: "Reset failed" }
+          : sessionState === "checking"
+            ? { status: "running" as const, label: "Checking" }
+            : sessionState === "expired"
+              ? { status: "failed" as const, label: "Expired" }
+              : sessionState === "backend_unavailable"
+                ? { status: "review" as const, label: "Session unknown" }
+                : { status: "waiting" as const, label: "No session" };
 
   const backendBadge =
     backendState === "available"
@@ -338,20 +392,37 @@ export function LandingDemoAction() {
   } = useLandingSession();
 
   const label =
-    isBusy || sessionState === "checking"
+    sessionState === "resetting"
+      ? "Resetting..."
+      : isBusy || sessionState === "checking"
       ? "Checking..."
       : sessionState === "active"
         ? "Continue Session"
         : sessionState === "reset_ready"
           ? "Launch Demo"
-          : sessionState === "expired"
-            ? "Start New Session"
-            : backendState === "unavailable"
-              ? "Retry Backend"
-              : "Launch Demo";
+          : sessionState === "reset_failed"
+            ? "Retry Status"
+            : sessionState === "expired"
+              ? "Start New Session"
+              : backendState === "unavailable"
+                ? "Retry Backend"
+                : "Launch Demo";
+
+  const helperText =
+    sessionState === "resetting"
+      ? "Resetting demo workspace while preserving public quota."
+      : sessionState === "reset_ready"
+        ? "Workspace reset. Launch Demo to start again."
+        : "No account needed - anonymous 3-day demo session";
 
   async function handleClick() {
-    if (isBusy || sessionState === "checking") {
+    if (isBusy || sessionState === "checking" || sessionState === "resetting") {
+      return;
+    }
+
+    if (sessionState === "reset_failed") {
+      clearStoredDemoSessionResetFailure();
+      await retry();
       return;
     }
 
@@ -379,9 +450,15 @@ export function LandingDemoAction() {
         <Button
           type="button"
           onClick={() => void handleClick()}
-          disabled={isBusy || sessionState === "checking"}
+          disabled={
+            isBusy ||
+            sessionState === "checking" ||
+            sessionState === "resetting"
+          }
         >
-          {isBusy || sessionState === "checking" ? (
+          {isBusy ||
+          sessionState === "checking" ||
+          sessionState === "resetting" ? (
             <InlineSpinner />
           ) : (
             <svg {...iconProps}>
@@ -393,7 +470,7 @@ export function LandingDemoAction() {
           {label}
         </Button>
         <p className="whitespace-nowrap text-sm text-slate-400">
-          No account needed · anonymous 3-day demo session
+          {helperText}
         </p>
       </div>
       {error ? (
