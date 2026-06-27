@@ -1,18 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
+import { displayDatasetName } from "@/lib/datasetNames";
 import {
-  createRawRetailDemoDataset,
-  isSessionInvalidError,
-  MeshFlowApiError,
-  uploadDataset,
-  uploadPreflight,
   type ReadinessCheck,
-  type DatasetUploadResponse,
   type UploadPreflightResponse,
 } from "@/lib/meshflowApi";
 
@@ -43,6 +38,12 @@ type UploadCheckState =
   | "blocked"
   | "ready"
   | "failed";
+
+type UploadFailureNotice = {
+  message: string;
+  nextAction: string | null;
+  errorCode: string | null;
+};
 
 const ERROR_LABELS: Record<string, string> = {
   FILE_TOO_LARGE: "The selected file is larger than the demo file-size limit.",
@@ -94,58 +95,98 @@ function readinessBadge(check: ReadinessCheck) {
 
 export default function UploadPage() {
   const router = useRouter();
+  const fileInputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-  const { limits, refresh, sessionId, workspace } = useWorkspaceSession();
+  const {
+    activeProcessLabel,
+    clearDatasetUploadOperation,
+    datasetUploadOperation,
+    isAnyProcessRunning,
+    limits,
+    sessionId,
+    startCsvDatasetUpload,
+    startDemoDatasetUpload,
+    workspace,
+  } = useWorkspaceSession();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [checkState, setCheckState] = useState<UploadCheckState>("idle");
   const [frontendErrors, setFrontendErrors] = useState<string[]>([]);
-  const [preflight, setPreflight] = useState<UploadPreflightResponse | null>(null);
-  const [requestError, setRequestError] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState<DatasetUploadResponse | null>(null);
-  const [isAddingDemo, setIsAddingDemo] = useState(false);
-  const [demoRequestError, setDemoRequestError] = useState<string | null>(null);
 
   const fileLimitMb = limits?.max_upload_file_size_mb ?? 5;
   const demoDataset =
     workspace?.datasets.find((dataset) => dataset.source_type === "demo_raw_retail") ??
     null;
+  const csvOperation =
+    datasetUploadOperation?.kind === "csv" ? datasetUploadOperation : null;
+  const demoOperation =
+    datasetUploadOperation?.kind === "demo_dataset" ? datasetUploadOperation : null;
+  const preflight: UploadPreflightResponse | null = csvOperation?.preflight ?? null;
+  const requestError: UploadFailureNotice | null =
+    csvOperation?.status === "failed"
+      ? {
+          message: csvOperation.error?.message ?? csvOperation.message,
+          nextAction: csvOperation.error?.next_action ?? null,
+          errorCode: csvOperation.error?.error_code ?? null,
+        }
+      : null;
+  const effectiveCheckState: UploadCheckState =
+    csvOperation?.status === "checking"
+      ? "checking"
+      : csvOperation?.status === "uploading" || csvOperation?.status === "completed"
+        ? "ready"
+        : csvOperation?.status === "failed"
+          ? csvOperation.preflight?.can_upload === false
+            ? "blocked"
+            : "failed"
+          : checkState;
+  const isUploading = csvOperation?.status === "uploading";
+  const isAddingDemo = demoOperation?.status === "preparing_demo";
+  const uploadResult =
+    csvOperation?.status === "completed" ? csvOperation.result ?? null : null;
+  const demoRequestError =
+    demoOperation?.status === "failed" ? demoOperation.error?.message ?? demoOperation.message : null;
+  const selectedFileName = selectedFile?.name ?? csvOperation?.fileName ?? null;
+  const selectedFileMb =
+    selectedFile !== null
+      ? fileSizeMb(selectedFile.size)
+      : csvOperation?.fileSizeMb ?? null;
+  const isFileProcessing = effectiveCheckState === "checking" || isUploading;
+
+  useEffect(() => {
+    const nextRoute = datasetUploadOperation?.result?.next_route;
+    if (datasetUploadOperation?.status !== "completed" || !nextRoute) {
+      return;
+    }
+
+    clearDatasetUploadOperation();
+    router.push(nextRoute);
+  }, [
+    clearDatasetUploadOperation,
+    datasetUploadOperation?.result?.next_route,
+    datasetUploadOperation?.status,
+    router,
+  ]);
 
   async function runPreflight(file: File) {
-    if (!sessionId) {
-      setCheckState("failed");
-      setRequestError("No active demo session is available for upload preflight.");
+    if (isAnyProcessRunning) {
       return;
     }
 
     setCheckState("checking");
-    setRequestError(null);
 
-    try {
-      const response = await uploadPreflight(file, sessionId);
-      setPreflight(response);
-      setCheckState(response.can_upload ? "ready" : "blocked");
-      setUploadResult(null);
-      void refresh();
-    } catch (caught) {
-      if (isSessionInvalidError(caught)) {
-        void refresh();
-      }
-
+    const response = await startCsvDatasetUpload(file);
+    if (!response) {
       setCheckState("failed");
-      setRequestError(
-        caught instanceof MeshFlowApiError
-          ? caught.details.message
-          : "Upload preflight could not reach the backend.",
-      );
     }
   }
 
   function handleFileChange(file: File | null) {
+    if (isAnyProcessRunning) {
+      return;
+    }
+
+    clearDatasetUploadOperation();
     setSelectedFile(file);
-    setPreflight(null);
-    setRequestError(null);
-    setUploadResult(null);
 
     if (!file) {
       setFrontendErrors([]);
@@ -163,75 +204,51 @@ export default function UploadPage() {
     void runPreflight(file);
   }
 
-  async function handleUpload() {
-    if (!selectedFile || !sessionId || !preflight?.can_upload || isUploading) {
-      return;
-    }
-
-    setIsUploading(true);
-    setRequestError(null);
-
-    try {
-      const response = await uploadDataset(selectedFile, sessionId);
-      setUploadResult(response);
-      await refresh();
-      router.push(response.next_route);
-    } catch (caught) {
-      if (isSessionInvalidError(caught)) {
-        void refresh();
-      }
-
-      setRequestError(
-        caught instanceof MeshFlowApiError
-          ? caught.details.message
-          : "MeshFlow could not complete the upload.",
-      );
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
   async function handleUseDemoDataset() {
-    if (!sessionId || isAddingDemo || demoDataset) {
+    if (!sessionId || isAnyProcessRunning || demoDataset) {
       return;
     }
 
-    setIsAddingDemo(true);
-    setDemoRequestError(null);
-
-    try {
-      const response = await createRawRetailDemoDataset(sessionId);
-      await refresh();
-      router.push(response.next_route);
-    } catch (caught) {
-      if (isSessionInvalidError(caught)) {
-        void refresh();
-      }
-
-      setDemoRequestError(
-        caught instanceof MeshFlowApiError
-          ? caught.details.message
-          : "MeshFlow could not prepare the Raw Retail Transactions Demo.",
-      );
-    } finally {
-      setIsAddingDemo(false);
-    }
+    await startDemoDatasetUpload();
   }
 
-  const uploadButtonLabel =
-    isUploading
-      ? "Uploading..."
-      : checkState === "checking"
-      ? "Checking..."
-      : checkState === "ready"
-        ? "Upload"
-        : "Upload";
+  const filePickerDisabled = isAnyProcessRunning;
+  const uploadStateMessage =
+    isAnyProcessRunning && !isFileProcessing && !isAddingDemo
+      ? `Wait for the current process to finish: ${activeProcessLabel}.`
+      : !sessionId
+      ? "Waiting for an active demo session before file checks can run."
+      : selectedFileName
+        ? isUploading
+          ? "Preflight passed. Uploading to S3 and loading Snowflake Warehouse Raw."
+          : effectiveCheckState === "checking"
+            ? "Checking file, quota, S3, and Snowflake readiness."
+            : effectiveCheckState === "ready"
+              ? "Preflight passed. Upload starts automatically."
+            : effectiveCheckState === "frontend_blocked" ||
+                effectiveCheckState === "blocked" ||
+                effectiveCheckState === "failed"
+              ? "MeshFlow found a blocker before upload."
+              : "File selected. Waiting for upload checks."
+        : `Choose a CSV file to upload. Max ${fileLimitMb} MB per file.`;
 
   const issueList = [
     ...frontendErrors,
     ...(preflight?.file.errors ?? []),
+    ...(preflight?.file.warnings ?? []),
     ...(preflight?.quota.errors ?? []),
   ];
+  const readinessBlockers = preflight
+    ? [preflight.readiness.s3, preflight.readiness.snowflake].filter(
+        (check) => check.status === "failed" || check.status === "not_configured",
+      )
+    : [];
+  const uploadBlocked =
+    Boolean(selectedFileName) &&
+    (effectiveCheckState === "frontend_blocked" ||
+      effectiveCheckState === "blocked" ||
+      effectiveCheckState === "failed" ||
+      Boolean(requestError));
 
   return (
     <div className="px-6 py-8">
@@ -265,7 +282,8 @@ export default function UploadPage() {
               </h2>
               <p className="mt-1 text-sm leading-relaxed text-ink-soft">
                 A raw, denormalized retail transactions file. MeshFlow turns it
-                into a Dimensional Model and Data Marts — once per session.
+                into a Dimensional Model and Data Marts. Remove it later if you
+                want to add a fresh copy.
               </p>
             </div>
             <StatusBadge
@@ -284,13 +302,15 @@ export default function UploadPage() {
           <Button
             className="mt-4"
             size="sm"
-            disabled={!sessionId || isAddingDemo || Boolean(demoDataset)}
+            disabled={!sessionId || isAnyProcessRunning || Boolean(demoDataset)}
             onClick={handleUseDemoDataset}
             title={
               !sessionId
                 ? "Available once a demo session is active."
                 : demoDataset
-                ? "The Raw Retail Transactions Demo has already been added to this session."
+                ? "An active copy already exists. Delete it from Data Flow before adding a fresh copy."
+                : isAnyProcessRunning
+                ? `Wait for the current process to finish: ${activeProcessLabel}.`
                 : "Upload the curated raw retail CSV to S3 and load it into Snowflake Warehouse Raw."
             }
           >
@@ -335,10 +355,12 @@ export default function UploadPage() {
           </p>
 
           <input
+            id={fileInputId}
             ref={inputRef}
             type="file"
             accept=".csv,text/csv"
-            className="hidden"
+            disabled={filePickerDisabled}
+            className="sr-only"
             onChange={(e) => {
               handleFileChange(e.target.files?.[0] ?? null);
               e.currentTarget.value = "";
@@ -346,69 +368,132 @@ export default function UploadPage() {
           />
 
           <div className="mt-3 rounded-md border border-dashed border-border bg-surface-muted px-4 py-5 text-center">
-            {selectedFile ? (
+            {selectedFileName ? (
               <p className="text-sm text-ink-soft">
                 Selected:{" "}
-                <span className="font-mono text-ink">{selectedFile.name}</span>
-                <span className="ml-2 text-xs text-ink-muted">
-                  {fileSizeMb(selectedFile.size)} MB
-                </span>
+                <span className="font-mono text-ink">{selectedFileName}</span>
+                {selectedFileMb !== null ? (
+                  <span className="ml-2 text-xs text-ink-muted">
+                    {selectedFileMb} MB
+                  </span>
+                ) : null}
               </p>
             ) : (
               <p className="text-sm text-ink-muted">
-                Choose a CSV file; nothing is uploaded until you confirm.
+                Choose a CSV file. MeshFlow checks it first, then uploads automatically if it is ready.
               </p>
             )}
 
             <div className="mt-3 flex items-center justify-center gap-2">
-              {selectedFile ? (
+              {selectedFileName ? (
                 <Button
+                  type="button"
                   variant="secondary"
                   size="sm"
-                  disabled={checkState === "checking" || isUploading}
+                  disabled={filePickerDisabled}
+                  title={
+                    isAddingDemo
+                      ? "Wait for the demo dataset to finish preparing before changing files."
+                      : isAnyProcessRunning
+                        ? `Wait for the current process to finish: ${activeProcessLabel}.`
+                      : undefined
+                  }
                   onClick={() => inputRef.current?.click()}
                 >
                   Change file
                 </Button>
               ) : (
-                <Button size="sm" onClick={() => inputRef.current?.click()}>
-                  Browse
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={filePickerDisabled}
+                  title={
+                    isAddingDemo
+                      ? "Wait for the demo dataset to finish preparing before uploading a CSV."
+                      : isAnyProcessRunning
+                        ? `Wait for the current process to finish: ${activeProcessLabel}.`
+                      : undefined
+                  }
+                  onClick={() => inputRef.current?.click()}
+                >
+                  Upload
                 </Button>
               )}
-              {selectedFile ? (
-                <Button
-                  size="sm"
-                  disabled={!preflight?.can_upload || isUploading || checkState === "checking"}
-                  onClick={handleUpload}
-                  title={
-                    preflight?.can_upload
-                      ? "Upload the CSV to S3 and load it into Snowflake Warehouse Raw."
-                      : "Upload is enabled only after validation, quota, S3, and Snowflake checks pass."
-                  }
-                >
-                  {checkState === "checking" || isUploading ? (
-                    <svg
-                      width={14}
-                      height={14}
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      aria-hidden
-                      className="animate-spin"
-                    >
-                      <path d="M16 5.5A7 7 0 1 0 17 10" />
-                      <path d="M16 3v3h-3" />
-                    </svg>
-                  ) : null}
-                  {uploadButtonLabel}
-                </Button>
-              ) : null}
             </div>
+            <p
+              className={
+                uploadBlocked || !sessionId
+                  ? "mt-2 text-xs font-medium text-red-700"
+                  : "mt-2 text-xs text-ink-muted"
+              }
+            >
+              {uploadStateMessage}
+            </p>
           </div>
 
-          {checkState === "checking" ? (
+          {uploadBlocked ? (
+            <div
+              className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
+              role="alert"
+              aria-live="assertive"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <StatusBadge status="failed" label={requestError ? "Upload failed" : "Upload blocked"} />
+                {requestError?.errorCode ? (
+                  <span className="rounded-full bg-red-100 px-2 py-0.5 font-mono text-[0.6875rem] font-semibold text-red-700">
+                    {requestError.errorCode}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 text-xs leading-relaxed">
+                {requestError?.message ??
+                  preflight?.message ??
+                  "MeshFlow cannot upload this CSV yet."}
+              </p>
+              {issueList.length > 0 || readinessBlockers.length > 0 ? (
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-relaxed">
+                  {[...new Set(issueList)].map((issue) => (
+                    <li key={issue}>{readableIssue(issue)}</li>
+                  ))}
+                  {readinessBlockers.map((check) => (
+                    <li key={`${check.status}-${check.message}`}>
+                      {check.message}
+                      {check.next_action ? ` ${check.next_action}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {requestError?.nextAction ? (
+                <p className="mt-2 text-xs font-medium text-red-700">
+                  {requestError.nextAction}
+                </p>
+              ) : null}
+              {effectiveCheckState !== "checking" ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {selectedFile ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={isAnyProcessRunning}
+                      onClick={() => runPreflight(selectedFile)}
+                    >
+                      Retry checks
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={filePickerDisabled}
+                    onClick={() => inputRef.current?.click()}
+                  >
+                    Change file
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {effectiveCheckState === "checking" ? (
             <div className="mt-3 flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
               <StatusBadge status="running" label="Checking" />
               <span>Checking file, S3, and Snowflake readiness...</span>
@@ -428,12 +513,6 @@ export default function UploadPage() {
             </div>
           ) : null}
 
-          {requestError ? (
-            <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {requestError}
-            </div>
-          ) : null}
-
           {isUploading ? (
             <div className="mt-3 flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
               <StatusBadge status="running" label="Uploading" />
@@ -444,7 +523,9 @@ export default function UploadPage() {
           {uploadResult ? (
             <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
               Upload completed for{" "}
-              <span className="font-mono">{uploadResult.dataset.name}</span>.
+              <span className="font-mono">
+                {displayDatasetName(uploadResult.dataset.name, uploadResult.dataset.id)}
+              </span>.
               Opening Data Flow for schema review.
             </div>
           ) : null}
@@ -497,7 +578,7 @@ export default function UploadPage() {
 
               <p className="rounded-md border border-border bg-surface px-3 py-2 text-xs text-ink-muted">
                 {preflight.can_upload
-                  ? "Ready for upload. The next click will upload to S3, load Warehouse Raw in Snowflake, and open Data Flow for schema review."
+                  ? "Ready for upload. MeshFlow is uploading to S3, loading Warehouse Raw in Snowflake, and opening Data Flow for schema review."
                   : preflight.message}
               </p>
             </div>
