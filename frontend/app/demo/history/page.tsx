@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnalysisDetailDrawer } from "@/components/analysis/AnalysisDetailDrawer";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
+import { displayDatasetName } from "@/lib/datasetNames";
 import {
   listAnalysisRuns,
   MeshFlowApiError,
@@ -29,6 +30,25 @@ function formatDate(value: string | null): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function InlineSpinner() {
+  return (
+    <svg
+      width={14}
+      height={14}
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      aria-hidden
+      className="animate-spin"
+    >
+      <path d="M16 5.5A7 7 0 1 0 17 10" />
+      <path d="M16 3v3h-3" />
+    </svg>
+  );
+}
+
 function statusTone(status: string): string {
   if (status === "completed") {
     return "border-emerald-200 bg-emerald-50 text-emerald-700";
@@ -40,7 +60,7 @@ function statusTone(status: string): string {
 }
 
 export default function HistoryPage() {
-  const { sessionId } = useWorkspaceSession();
+  const { activeProcessLabel, isAnyProcessRunning, sessionId } = useWorkspaceSession();
   const [runs, setRuns] = useState<AnalysisRunSummary[]>([]);
   const [state, setState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -118,7 +138,8 @@ export default function HistoryPage() {
         </div>
 
         {state === "loading" ? (
-          <div className="px-6 py-12 text-center text-sm text-ink-muted">
+          <div className="flex items-center justify-center gap-2 px-6 py-12 text-center text-sm text-ink-muted">
+            <InlineSpinner />
             Loading real analysis history...
           </div>
         ) : null}
@@ -169,7 +190,9 @@ export default function HistoryPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-                  <span className="truncate">{run.dataset_name ?? run.dataset_id}</span>
+                  <span className="truncate">
+                    {displayDatasetName(run.dataset_name, run.dataset_id)}
+                  </span>
                   {run.dataset_deleted ? (
                     <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
                       Dataset deleted
@@ -194,8 +217,14 @@ export default function HistoryPage() {
                 </div>
                 <button
                   type="button"
+                  disabled={isAnyProcessRunning}
                   onClick={() => setDetailAnalysisId(run.id)}
-                  className="cursor-pointer rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:border-emerald-300 hover:bg-emerald-100"
+                  title={
+                    isAnyProcessRunning
+                      ? `Wait for the current process to finish: ${activeProcessLabel}.`
+                      : "View stored analysis evidence."
+                  }
+                  className="cursor-pointer rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition-colors hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-55"
                 >
                   View Detail
                 </button>
