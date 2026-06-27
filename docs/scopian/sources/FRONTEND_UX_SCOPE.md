@@ -119,8 +119,12 @@ CTA behavior:
 ```text
 No session: Launch Demo
 Active session: Continue Session
+Reset pending: show Resetting... and disable CTA
+Reset complete: Launch Demo
 Expired session: Start New Session
 ```
+
+After Reset Demo is confirmed from the workspace, the UI should navigate to the Landing page immediately. Landing shows reset-pending status while the backend reset is running. When reset completes, Launch Demo should reuse the valid reset/empty session and route to `/demo/upload`; it must not create a fresh quota-bypassing session.
 
 ## 5. Workspace shell
 

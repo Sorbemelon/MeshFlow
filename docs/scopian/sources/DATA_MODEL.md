@@ -71,8 +71,8 @@ Rules:
 ```text
 Workspace routes require an active session.
 Expired sessions are inaccessible.
-Reset clears workspace data but does not reset production usage.
-Development can reset usage if ALLOW_DEMO_RESET_USAGE=true.
+Public reset clears workspace data but does not reset usage.
+Development/test usage reset, if ever needed, must be separate from the public Reset Demo flow.
 Upload storage usage increments only after successful stored upload/load.
 ```
 

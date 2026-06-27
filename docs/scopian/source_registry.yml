@@ -8,9 +8,9 @@ sources:
   - id: SRC-api-contract
     path: docs/scopian/sources/API_CONTRACT.md
     status: active
-    content_hash: sha256:0d433fe863f8cc33bf63a97b864e9b2f3005cd97c3c98627713d48e737c80f62
+    content_hash: sha256:c8ae9502bea37f1ef4fe23f4954f251e7d82c7ee92974774ebb58f146559e038
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-26T16:29:39+07:00
+    updated_at: 2026-06-27T22:17:17+07:00
   - id: SRC-build-phases
     path: docs/scopian/sources/BUILD_PHASES.md
     status: active
@@ -20,9 +20,9 @@ sources:
   - id: SRC-data-model
     path: docs/scopian/sources/DATA_MODEL.md
     status: active
-    content_hash: sha256:345259de0bd385ef9dce5fa4dc437611b2cb118087776c652d696720dfc47525
+    content_hash: sha256:3e93db114fd5e17b16896cd01581c7f192a7db692ec0bc6de162d89035f08292
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-26T16:29:39+07:00
+    updated_at: 2026-06-27T22:17:17+07:00
   - id: SRC-data-selection-ux
     path: docs/scopian/sources/DATA_SELECTION_UX.md
     status: active
@@ -38,9 +38,9 @@ sources:
   - id: SRC-frontend-ux-scope
     path: docs/scopian/sources/FRONTEND_UX_SCOPE.md
     status: active
-    content_hash: sha256:185ff2bd5a075911b4fdef6b5b84450185f0ff099f792827631925d1dbd95df0
+    content_hash: sha256:e28e8085cc659e89bc692b838aa13c16e454ef6648bf45229d682193bfe2f019
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-26T16:29:39+07:00
+    updated_at: 2026-06-27T22:17:17+07:00
   - id: SRC-legacy-reference-rules
     path: docs/scopian/sources/LEGACY_REFERENCE_RULES.md
     status: active
@@ -68,9 +68,9 @@ sources:
   - id: SRC-session-limits-and-navigation
     path: docs/scopian/sources/SESSION_LIMITS_AND_NAVIGATION.md
     status: active
-    content_hash: sha256:d4414634beae7d2ac5640954246c74c97d7f4a319ea2e63fef35772562b85a49
+    content_hash: sha256:65d15db6a124d33afca17d7c18d0706de6374fad776e3d1228ed04fc4f1663e4
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-26T16:29:39+07:00
+    updated_at: 2026-06-27T22:17:17+07:00
   - id: SRC-system-architecture
     path: docs/scopian/sources/SYSTEM_ARCHITECTURE.md
     status: active

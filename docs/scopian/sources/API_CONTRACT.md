@@ -109,17 +109,15 @@ Validates/restores the current session based on `X-Demo-Session-Id`.
 
 Resets workspace data for the current session.
 
-Production rule:
+Public reset rule:
 
 ```text
 Reset does not reset quota or usage.
+usage_reset = false
+quota_restored = false
 ```
 
-Development rule:
-
-```text
-Reset can reset usage if ALLOW_DEMO_RESET_USAGE=true.
-```
+Development/test quota reset, if ever needed, must be separate from the public Reset Demo endpoint.
 
 Reset responses should clearly report workspace cleanup, usage reset status, and external cleanup warnings.
 

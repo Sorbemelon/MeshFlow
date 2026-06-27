@@ -157,18 +157,9 @@ Reset Demo does not reset quota or usage.
 Deleting components does not reduce quota or usage.
 ```
 
-Development:
+Public Reset Demo always preserves quota and usage, including local development UI usage.
 
-```text
-Reset Demo can reset quota and usage.
-```
-
-Config:
-
-```text
-ALLOW_DEMO_RESET_USAGE=true   # development
-ALLOW_DEMO_RESET_USAGE=false  # production
-```
+Development/test quota reset, if ever needed, must be separate from the public Reset Demo endpoint and flow.
 
 Reset should clear:
 
@@ -187,7 +178,7 @@ history
 selected dataset UI state
 ```
 
-Reset should not clear in production:
+Reset should not clear:
 
 ```text
 quota usage
@@ -197,7 +188,13 @@ abuse/rate-limit attempt logs required for protection
 After reset:
 
 ```text
-navigate to /demo/upload
+navigate to Landing immediately
+show Resetting... while backend reset is pending
+disable the Landing CTA while reset is pending
+show Launch Demo after reset completes, not Continue Session
+Launch Demo reuses the valid reset/empty session and routes to /demo/upload
+do not create a quota-bypassing fresh session
+show an honest reset failure state if reset fails
 ```
 
 ## 8. Cleanup after expiry
