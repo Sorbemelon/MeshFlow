@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -14,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import Settings, settings
+from app.db.session import SessionLocal
 from app.core.errors import AppError
 from app.models.dataset import (
     AiProviderRun,
@@ -31,6 +33,7 @@ from app.services.demo_session_service import get_required_session
 
 
 TASK_TYPE = "semantic_preparation"
+JOB_PROVIDER_NAME = "semantic_preparation_job"
 TEMPERATURE = 0.1
 SAFE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
 ALLOWED_SEMANTIC_ROLES = {
@@ -139,11 +142,26 @@ def semantic_preparation_summary_from_dataset(
     *,
     prefer_latest_failure: bool = False,
 ) -> SemanticPreparationResponse:
-    task_runs = [run for run in dataset.provider_runs if run.task_type == TASK_TYPE]
+    task_runs = sorted(
+        [run for run in dataset.provider_runs if run.task_type == TASK_TYPE],
+        key=lambda run: run.created_at,
+    )
     semantic_columns = list(dataset.semantic_columns)
 
     latest_run = task_runs[-1] if task_runs else None
-    if prefer_latest_failure and latest_run and latest_run.status in {"failed", "unavailable"}:
+    running_run = next(
+        (
+            run
+            for run in reversed(task_runs)
+            if run.provider_name == JOB_PROVIDER_NAME and run.status == "running"
+        ),
+        None,
+    )
+    if running_run and not semantic_columns:
+        response_status = "running"
+        message = "Semantic preparation is running. MeshFlow is checking configured AI providers."
+        next_action = "Wait for the semantic preparation status to update."
+    elif prefer_latest_failure and latest_run and latest_run.status in {"failed", "unavailable"}:
         response_status = "failed"
         message = (
             latest_run.error_message
@@ -173,6 +191,7 @@ def semantic_preparation_summary_from_dataset(
         semantic_columns=[_semantic_column_summary(column) for column in semantic_columns],
         provider_runs=[_provider_run_summary(run) for run in task_runs],
         next_action=next_action,
+        job_id=running_run.id if running_run else None,
     )
 
 
@@ -503,6 +522,116 @@ def _clear_existing_semantic_columns(db: Session, dataset: Dataset) -> None:
         db.delete(semantic_column)
 
 
+def _latest_running_job(dataset: Dataset) -> AiProviderRun | None:
+    task_runs = sorted(
+        [run for run in dataset.provider_runs if run.task_type == TASK_TYPE],
+        key=lambda run: run.created_at,
+    )
+    return next(
+        (
+            run
+            for run in reversed(task_runs)
+            if run.provider_name == JOB_PROVIDER_NAME and run.status == "running"
+        ),
+        None,
+    )
+
+
+def _finalize_job_run(
+    db: Session,
+    job_run_id: str | None,
+    *,
+    status_value: str,
+    error_code: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    if job_run_id is None:
+        return
+    job_run = db.get(AiProviderRun, job_run_id)
+    if job_run is None:
+        return
+    job_run.status = status_value
+    job_run.error_code = error_code
+    job_run.error_message = error_message
+
+
+def _run_semantic_preparation_background(
+    *,
+    session_id: str,
+    dataset_id: str,
+    force: bool,
+    job_run_id: str,
+    config: Settings,
+) -> None:
+    with SessionLocal() as db:
+        try:
+            run_semantic_preparation(
+                db,
+                session_id,
+                dataset_id,
+                force=force,
+                config=config,
+                job_run_id=job_run_id,
+            )
+        except Exception as exc:  # pragma: no cover - defensive job finalizer
+            _finalize_job_run(
+                db,
+                job_run_id,
+                status_value="failed",
+                error_code="SEMANTIC_PREPARATION_JOB_FAILED",
+                error_message="Semantic preparation job failed before storing suggestions.",
+            )
+            db.commit()
+
+
+def start_semantic_preparation(
+    db: Session,
+    session_id: str | None,
+    dataset_id: str,
+    *,
+    force: bool = False,
+    config: Settings = settings,
+) -> SemanticPreparationResponse:
+    session = get_required_session(db, session_id)
+    dataset = _load_dataset_for_session(db, session.id, dataset_id)
+    _ensure_dataset_has_profiles(dataset)
+
+    if dataset.semantic_columns and not force:
+        return semantic_preparation_summary_from_dataset(dataset)
+
+    running_job = _latest_running_job(dataset)
+    if running_job is not None:
+        return semantic_preparation_summary_from_dataset(dataset)
+
+    job_run = AiProviderRun(
+        dataset=dataset,
+        task_type=TASK_TYPE,
+        provider_name=JOB_PROVIDER_NAME,
+        provider_model=None,
+        status="running",
+        error_message="Semantic preparation is running.",
+    )
+    db.add(job_run)
+    db.commit()
+    db.refresh(dataset)
+    db.refresh(job_run)
+
+    thread = threading.Thread(
+        target=_run_semantic_preparation_background,
+        kwargs={
+            "session_id": session.id,
+            "dataset_id": dataset.id,
+            "force": force,
+            "job_run_id": job_run.id,
+            "config": config,
+        },
+        daemon=True,
+    )
+    thread.start()
+
+    return get_semantic_preparation(db, session.id, dataset.id)
+
+
 def _store_validated_output(
     *,
     db: Session,
@@ -544,6 +673,7 @@ def run_semantic_preparation(
     *,
     force: bool = False,
     config: Settings = settings,
+    job_run_id: str | None = None,
 ) -> SemanticPreparationResponse:
     dataset = _load_dataset_for_session(db, session_id, dataset_id)
     _ensure_dataset_has_profiles(dataset)
@@ -603,6 +733,7 @@ def run_semantic_preparation(
 
         _clear_existing_semantic_columns(db, dataset)
         _store_validated_output(db=db, dataset=dataset, output=validated, provider=candidate)
+        _finalize_job_run(db, job_run_id, status_value="completed")
         db.add(
             _provider_run(
                 dataset=dataset,
@@ -615,6 +746,13 @@ def run_semantic_preparation(
         db.commit()
         return get_semantic_preparation(db, session_id, dataset_id)
 
+    _finalize_job_run(
+        db,
+        job_run_id,
+        status_value="failed",
+        error_code="SEMANTIC_PREPARATION_FAILED",
+        error_message="AI semantic preparation failed. No fake suggestions were stored.",
+    )
     db.commit()
     dataset = _load_dataset_for_session(db, session_id, dataset_id)
     return semantic_preparation_summary_from_dataset(dataset, prefer_latest_failure=True)

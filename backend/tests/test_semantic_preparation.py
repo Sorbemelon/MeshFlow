@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -155,10 +157,27 @@ def configured_candidates() -> list[ProviderCandidate]:
 
 def post_semantic(client: TestClient, session_id: str | None, dataset_id: str, body=None):
     headers = {DEMO_SESSION_HEADER: session_id} if session_id else {}
+    request_body = {"async_run": False, **(body or {})}
+    return client.post(
+        f"/api/v1/datasets/{dataset_id}/semantic-preparation",
+        headers=headers,
+        json=request_body,
+    )
+
+
+def post_semantic_async(client: TestClient, session_id: str | None, dataset_id: str, body=None):
+    headers = {DEMO_SESSION_HEADER: session_id} if session_id else {}
     return client.post(
         f"/api/v1/datasets/{dataset_id}/semantic-preparation",
         headers=headers,
         json=body,
+    )
+
+
+def get_semantic(client: TestClient, session_id: str, dataset_id: str):
+    return client.get(
+        f"/api/v1/datasets/{dataset_id}/semantic-preparation",
+        headers={DEMO_SESSION_HEADER: session_id},
     )
 
 
@@ -271,6 +290,59 @@ def test_semantic_prep_mocked_gemini_success_stores_suggestions(
     assert db_session.scalars(select(DatasetQuestionSuggestion)).all() == []
     runs = db_session.scalars(select(AiProviderRun)).all()
     assert [run.status for run in runs] == ["completed"]
+
+
+def test_semantic_prep_async_start_can_be_polled_to_completion(
+    client: TestClient,
+    db_session: Session,
+    db_session_factory,
+    monkeypatch,
+) -> None:
+    provider_can_finish = threading.Event()
+    monkeypatch.setattr(
+        "app.services.semantic_preparation_service.SessionLocal",
+        db_session_factory,
+    )
+    monkeypatch.setattr(
+        "app.services.semantic_preparation_service.provider_candidates",
+        lambda _config: configured_candidates(),
+    )
+
+    def slow_gemini(candidate, prompt, temperature):
+        provider_can_finish.wait(timeout=2)
+        return semantic_payload()
+
+    monkeypatch.setattr("app.services.semantic_preparation_service.call_gemini_provider", slow_gemini)
+    session_id = create_session(client)
+    dataset_id = create_profiled_dataset(db_session, session_id)
+
+    response = post_semantic_async(client, session_id, dataset_id)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "running"
+    assert body["job_id"]
+    assert body["semantic_columns"] == []
+
+    poll_response = get_semantic(client, session_id, dataset_id)
+    assert poll_response.status_code == 200
+    assert poll_response.json()["status"] == "running"
+
+    provider_can_finish.set()
+    completed_body = None
+    for _ in range(40):
+        time.sleep(0.05)
+        poll_response = get_semantic(client, session_id, dataset_id)
+        completed_body = poll_response.json()
+        if completed_body["status"] == "completed":
+            break
+
+    assert completed_body is not None
+    assert completed_body["status"] == "completed"
+    assert len(completed_body["semantic_columns"]) == 3
+    statuses = [run["status"] for run in completed_body["provider_runs"]]
+    assert "running" not in statuses
+    assert "completed" in statuses
 
 
 def test_semantic_prep_tries_next_gemini_key_before_fallback_model(
