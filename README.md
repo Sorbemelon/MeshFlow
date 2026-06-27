@@ -188,6 +188,23 @@ Planned deployment:
 
 Hosted URLs will be added only after deployment is complete and verified.
 
+Render backend settings:
+
+| Setting | Value |
+|---|---|
+| Service type | Web Service |
+| Root directory | `backend` |
+| Runtime | Python |
+| Python version | `3.11.9` or another fully qualified Python 3.11.x version |
+| Build command | `pip install -r requirements.txt` |
+| Start command | `python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| Health check path | `/health` |
+| Migration command | `python -m alembic upgrade head` |
+
+Run the Alembic migration after setting `DATABASE_URL` to the Supabase PostgreSQL connection string. Do not run migrations from app startup unless that deployment behavior is explicitly added later.
+
+Render environment variables should be configured in the Render dashboard, not committed. At minimum, set `DATABASE_URL`, `BACKEND_CORS_ORIGINS` with the deployed Vercel origin such as `https://<your-vercel-project>.vercel.app`, the demo quota settings, AWS S3 settings, Snowflake settings, dbt settings, and Gemini/OpenAI provider settings from `backend/.env.example`.
+
 ## Project Structure
 
 ```text
