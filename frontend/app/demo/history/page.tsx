@@ -119,7 +119,7 @@ export default function HistoryPage() {
           <h1 className="text-xl font-semibold text-ink">History</h1>
           <p className="mt-0.5 text-sm text-ink-muted">
             Real analysis runs are preserved with SQL, ChartSpec, result preview,
-            provider evidence, and insight status.
+            AI run details, and insight status.
           </p>
         </div>
       </header>

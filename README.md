@@ -57,7 +57,7 @@ The demo includes a raw denormalized retail dataset and a CSV upload flow. MeshF
 | Warehouse-first analytics | Successful data work goes through S3, Snowflake, and dbt instead of local mock execution. |
 | Visible data preparation | Users can inspect raw schema, mappings, transformation evidence, marts, and model relationships. |
 | AI with validation | Providers propose mappings, plans, questions, and insights; backend validation decides what is accepted. |
-| Evidence-backed dashboards | SQL, ChartSpec JSON, preview rows, provider evidence, insights, and snapshots remain inspectable. |
+| Evidence-backed dashboards | SQL, ChartSpec JSON, preview rows, AI run details, insights, and snapshots remain inspectable. |
 
 ## Highlights
 
@@ -78,7 +78,7 @@ The demo includes a raw denormalized retail dataset and a CSV upload flow. MeshF
 **Workspace**
 - Four main pages: Upload Dataset, Data Flow, Dashboard, History.
 - Persisted dashboard cards with remove, compact/expand, and add-from-history behavior.
-- Analysis Detail drawer with SQL, output schema, preview rows, ChartSpec, charts, insights, and provider evidence.
+- Analysis Detail drawer with SQL, output schema, preview rows, ChartSpec, charts, insights, and AI run details.
 - Dataset delete and Reset Demo preserve successful quota usage and keep historical snapshots readable.
 
 ## Demo Flow
@@ -91,7 +91,7 @@ The demo includes a raw denormalized retail dataset and a CSV upload flow. MeshF
 | 4 | Transform | Review the AI Modeling Plan path and run dbt into modeled Data Marts. |
 | 5 | Ask AI Analytics Engineer | Generate a validated plan for an attached ready dataset. |
 | 6 | View dashboard result | Inspect the chart, insight, dataset, source model, and saved card. |
-| 7 | Open History / Evidence | Review SQL, ChartSpec, preview rows, provider chain, and warnings. |
+| 7 | Open History / Evidence | Review SQL, ChartSpec, preview rows, AI attempt logs, and warnings. |
 | 8 | Delete or reset | Clear active workspace data without restoring public quota usage. |
 
 The demo is intentionally resource-limited: no account wall, clear quota display, honest setup/readiness failures, and no fake generated data.

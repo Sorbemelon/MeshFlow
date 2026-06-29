@@ -2,7 +2,7 @@
 generated_by: scopian
 generator_schema: v0.2-B
 view: main
-generated_at: 2026-06-29T20:29:18+07:00
+generated_at: 2026-06-29T22:13:26+07:00
 non_canonical: true
 generated_mode: single
 canonical_inputs:
@@ -13,10 +13,10 @@ canonical_inputs:
   - source_registry.yml
 input_hashes:
   view: sha256:d8813ce52fd6
-  sources: sha256:79917488741e
+  sources: sha256:580dfd8a3f48
   buffer: sha256:6eb1ad717d0a
   context: sha256:5ef45bc1a5d7
-  registry: sha256:323b9358779e
+  registry: sha256:5d3cd51e43d7
 ---
 
 # Generated Scope View
@@ -31,20 +31,20 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - view: main
 - view_path: docs/scopian/views/main/VIEW.md
-- generated_at: 2026-06-29T20:29:18+07:00
+- generated_at: 2026-06-29T22:13:26+07:00
 
 ## Selected Sources
 
-- docs/scopian/sources/AI_WORKFLOW.md (sha256:4f318c49a0ad88220a702abe83042eb887723cbd2533f85561625414f2e35b91)
-- docs/scopian/sources/API_CONTRACT.md (sha256:c8ae9502bea37f1ef4fe23f4954f251e7d82c7ee92974774ebb58f146559e038)
+- docs/scopian/sources/AI_WORKFLOW.md (sha256:d56b35c041d084b0a4c0cc94cf36c1d824959d066cca4d6cfa2d487e593f52b8)
+- docs/scopian/sources/API_CONTRACT.md (sha256:522de4ffd34da1288fb644024b0070a1b6c2ffff0e65f9a9a5f19ab426c00376)
 - docs/scopian/sources/BUILD_PHASES.md (sha256:f3a6d5bce1edfefbf0555d5afb3f0aabddbf7efe86d444688ab8f5b08f7cac8b)
-- docs/scopian/sources/DATA_MODEL.md (sha256:3e93db114fd5e17b16896cd01581c7f192a7db692ec0bc6de162d89035f08292)
+- docs/scopian/sources/DATA_MODEL.md (sha256:ade04bc620038cb51844b2ccc524206e4de72615169693a6fe21e766bc7d7e45)
 - docs/scopian/sources/DATA_SELECTION_UX.md (sha256:0f68ec4e47a788ebecea8a0121aa23dd575789f7082d75a572173e94024a8a4d)
-- docs/scopian/sources/FRONTEND_UX_SCOPE.md (sha256:e28e8085cc659e89bc692b838aa13c16e454ef6648bf45229d682193bfe2f019)
+- docs/scopian/sources/FRONTEND_UX_SCOPE.md (sha256:11bc1c46b1c079282c4b3bc19f1b1676d643b7473913988c14d64c36bee3a765)
 - docs/scopian/sources/LEGACY_REFERENCE_RULES.md (sha256:7cf570714a2d15c6df27933b1d4aee6f3f4ca4617ba46f0e3b3db649bbdb570d)
 - docs/scopian/sources/MAINTENANCE_RULES.md (sha256:4dd733005fe4e78516fac36a2b7c48ab30b0c2c8691cbec7dd54cd97a65d48b9)
 - docs/scopian/sources/PRODUCT_SCOPE.md (sha256:1b56a72550aed07c6726f8a64c144073b75c52524fe345d04699626b8c20fb1e)
-- docs/scopian/sources/SESSION_LIMITS_AND_NAVIGATION.md (sha256:65d15db6a124d33afca17d7c18d0706de6374fad776e3d1228ed04fc4f1663e4)
+- docs/scopian/sources/SESSION_LIMITS_AND_NAVIGATION.md (sha256:0ef8cb250c1630d2714370fd1f11d07bd0c488719683c5de1b47715584d8c981)
 - docs/scopian/sources/SYSTEM_ARCHITECTURE.md (sha256:43b676c84e0de3df8cb34ea71b063de7d94d4f1336b1b5fab0d55bcdf25a124d)
 - docs/scopian/sources/WAREHOUSE_DBT_EXECUTION.md (sha256:dbd19c082b1244d6ffde6a1d1461992a6b3ebf5c51528c9f5fcf9d4e60a87d77)
 - DESIGN.md (sha256:9c433b2fda9ab692012d369d87293e453aaad381438047b1135e99027ab9dc6e)
@@ -187,17 +187,17 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 ## Changelog Snapshot
 
-- generated_refresh: 2026-06-29T20:29:18+07:00
+- generated_refresh: 2026-06-29T22:13:26+07:00
 - selected_sources: 14
 - approved_buffer_records: 7
 
 ## Freshness Metadata
 
 - view: sha256:d8813ce52fd6
-- sources: sha256:79917488741e
+- sources: sha256:580dfd8a3f48
 - buffer: sha256:6eb1ad717d0a
 - context: sha256:5ef45bc1a5d7
-- registry: sha256:323b9358779e
+- registry: sha256:5d3cd51e43d7
 
 ## Refresh Instructions
 

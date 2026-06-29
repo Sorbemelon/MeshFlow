@@ -345,7 +345,7 @@ Collapsed by default:
 ```text
 SQL
 ChartSpec JSON
-provider chain
+AI attempt log
 lineage
 grain explanation
 warehouse/dbt details

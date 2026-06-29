@@ -313,7 +313,7 @@ export function AnalysisDetailDrawer({
                 <JsonBlock value={detail.analysis_run.preview_rows} />
               </EvidenceSection>
 
-              <EvidenceSection title="Provider Evidence">
+              <EvidenceSection title="AI Run Details">
                 <JsonBlock value={detail.analysis_run.provider_runs} />
               </EvidenceSection>
             </div>

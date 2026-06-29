@@ -67,7 +67,7 @@ const CAPABILITIES = [
   },
   {
     title: "Evidence-backed dashboard",
-    body: "Charts, insights, SQL, ChartSpec, lineage, and provider evidence remain traceable.",
+    body: "Charts, insights, SQL, ChartSpec, lineage, and AI run details remain traceable.",
     tint: "bg-emerald-400/12",
     border: "border-emerald-300/25",
     iconColor: "text-emerald-300",

@@ -2,15 +2,15 @@ sources:
   - id: SRC-ai-workflow
     path: docs/scopian/sources/AI_WORKFLOW.md
     status: active
-    content_hash: sha256:4f318c49a0ad88220a702abe83042eb887723cbd2533f85561625414f2e35b91
+    content_hash: sha256:d56b35c041d084b0a4c0cc94cf36c1d824959d066cca4d6cfa2d487e593f52b8
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-26T16:29:39+07:00
+    updated_at: 2026-06-29T22:13:15+07:00
   - id: SRC-api-contract
     path: docs/scopian/sources/API_CONTRACT.md
     status: active
-    content_hash: sha256:c8ae9502bea37f1ef4fe23f4954f251e7d82c7ee92974774ebb58f146559e038
+    content_hash: sha256:522de4ffd34da1288fb644024b0070a1b6c2ffff0e65f9a9a5f19ab426c00376
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-27T22:17:17+07:00
+    updated_at: 2026-06-29T22:13:15+07:00
   - id: SRC-build-phases
     path: docs/scopian/sources/BUILD_PHASES.md
     status: active
@@ -20,9 +20,9 @@ sources:
   - id: SRC-data-model
     path: docs/scopian/sources/DATA_MODEL.md
     status: active
-    content_hash: sha256:3e93db114fd5e17b16896cd01581c7f192a7db692ec0bc6de162d89035f08292
+    content_hash: sha256:ade04bc620038cb51844b2ccc524206e4de72615169693a6fe21e766bc7d7e45
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-27T22:17:17+07:00
+    updated_at: 2026-06-29T22:13:15+07:00
   - id: SRC-data-selection-ux
     path: docs/scopian/sources/DATA_SELECTION_UX.md
     status: active
@@ -38,9 +38,9 @@ sources:
   - id: SRC-frontend-ux-scope
     path: docs/scopian/sources/FRONTEND_UX_SCOPE.md
     status: active
-    content_hash: sha256:e28e8085cc659e89bc692b838aa13c16e454ef6648bf45229d682193bfe2f019
+    content_hash: sha256:11bc1c46b1c079282c4b3bc19f1b1676d643b7473913988c14d64c36bee3a765
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-27T22:17:17+07:00
+    updated_at: 2026-06-29T22:13:15+07:00
   - id: SRC-legacy-reference-rules
     path: docs/scopian/sources/LEGACY_REFERENCE_RULES.md
     status: active
@@ -68,9 +68,9 @@ sources:
   - id: SRC-session-limits-and-navigation
     path: docs/scopian/sources/SESSION_LIMITS_AND_NAVIGATION.md
     status: active
-    content_hash: sha256:65d15db6a124d33afca17d7c18d0706de6374fad776e3d1228ed04fc4f1663e4
+    content_hash: sha256:0ef8cb250c1630d2714370fd1f11d07bd0c488719683c5de1b47715584d8c981
     registered_at: 2026-06-15T15:20:52+07:00
-    updated_at: 2026-06-27T22:17:17+07:00
+    updated_at: 2026-06-29T22:13:15+07:00
   - id: SRC-system-architecture
     path: docs/scopian/sources/SYSTEM_ARCHITECTURE.md
     status: active

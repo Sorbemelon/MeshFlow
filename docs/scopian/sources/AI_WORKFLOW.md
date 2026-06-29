@@ -36,7 +36,7 @@ GEMINI_MODEL_3
 
 For each Gemini model in a provider route, MeshFlow should try key 1 and key 2 before moving to the next provider/model step.
 
-Provider keys must never be exposed to the frontend or stored in provider evidence.
+Provider keys must never be exposed to the frontend or stored in provider run records.
 
 ## 3. Approved AI task routing
 
@@ -436,7 +436,7 @@ Example:
 Analysis could not be generated because all configured provider attempts returned errors or invalid plan output. No chart was generated.
 ```
 
-## 17. Provider evidence
+## 17. Provider run records
 
 Provider runs should store:
 
@@ -460,7 +460,7 @@ OpenAI fallback
 Failed
 ```
 
-Full provider chain belongs in Analysis Detail or History detail.
+Full AI attempt logs belong in Analysis Detail or History detail.
 
 ## 18. AI Analytics Engineer UI requirement
 

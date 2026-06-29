@@ -454,7 +454,7 @@ Card snapshots must render without a live dataset dependency.
 
 ## 16. ai_provider_runs
 
-Purpose: provider evidence without exposing secrets.
+Purpose: provider run records without exposing secrets.
 
 Important fields:
 

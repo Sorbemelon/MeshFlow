@@ -296,7 +296,7 @@ def build_semantic_prompt(dataset: Dataset) -> str:
         "known_limits": [
             "Only Warehouse Raw and deterministic schema profiling are available to this task.",
             "This task only maps columns. It must not suggest analysis questions.",
-            "Do not invent columns, business facts, or provider evidence.",
+            "Do not invent columns, business facts, or provider run records.",
         ],
         "columns": [_profile_context(profile) for profile in dataset.column_profiles],
     }

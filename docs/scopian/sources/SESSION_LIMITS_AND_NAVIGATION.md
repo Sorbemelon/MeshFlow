@@ -303,7 +303,7 @@ but still render:
 question
 chart snapshot
 insight snapshot
-provider evidence
+AI run detail snapshot
 SQL snapshot
 ```
 

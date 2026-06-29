@@ -301,7 +301,7 @@ Return honest cleanup status for S3/Snowflake/dbt runtime cleanup.
 
 ### GET /api/v1/datasets/{dataset_id}/semantic-preparation
 
-Returns current semantic column mappings and provider evidence.
+Returns current semantic column mappings and provider run records.
 
 ### POST /api/v1/datasets/{dataset_id}/semantic-preparation
 
@@ -313,7 +313,7 @@ Behavior:
 use compact column profile context
 generate column mapping suggestions only
 store semantic_columns
-store provider evidence
+store provider run records
 return honest failure if all provider attempts fail
 ```
 
@@ -444,7 +444,7 @@ preview rows
 ChartSpecs
 charts
 insights
-provider evidence
+AI run details
 errors/warnings
 ```
 
