@@ -325,17 +325,12 @@ function stageState({
   }
 
   if (stage === "AI Modeling Plan") {
-    if (
-      dataset.source_type === "demo_raw_retail" ||
-      modelMetadata?.generated_from === "raw_retail_contract"
-    ) {
-      return "Not Required";
-    }
-
     const hasAiModelingPlanEvidence = Boolean(
       modelMetadata?.generated_from === "modeling_proposal" ||
         dataFlow?.artifacts.some(
-          (artifact) => artifact.artifact_type === "modeling_proposal",
+          (artifact) =>
+            artifact.artifact_type === "modeling_proposal_json" ||
+            artifact.name === "modeling_proposal",
         ),
     );
     if (hasAiModelingPlanEvidence) {

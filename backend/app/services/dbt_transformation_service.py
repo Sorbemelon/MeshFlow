@@ -1072,7 +1072,11 @@ def _generated_project(
     if dataset.source_type == RAW_RETAIL_DEMO_SOURCE_TYPE:
         models = RAW_RETAIL_MODELS
         sql_files = _retail_sql(_raw_relation(dataset))
-        modeling_proposal_json = None
+        modeling_proposal_json = (
+            proposal_to_json(modeling_proposal)
+            if modeling_proposal is not None
+            else None
+        )
         analysis_catalog = None
         model_metadata = _retail_model_metadata()
     else:
@@ -1333,14 +1337,12 @@ def transform_dataset(
 
     try:
         _ensure_snowflake_ready(config)
-        modeling_proposal = None
-        if dataset.source_type != RAW_RETAIL_DEMO_SOURCE_TYPE:
-            modeling_proposal = create_modeling_proposal(
-                db,
-                dataset,
-                mappings,
-                config=config,
-            )
+        modeling_proposal = create_modeling_proposal(
+            db,
+            dataset,
+            mappings,
+            config=config,
+        )
         project = _generated_project(
             dataset=dataset,
             transformation_run=transformation_run,

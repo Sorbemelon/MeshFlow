@@ -2,7 +2,7 @@
 generated_by: scopian
 generator_schema: v0.2-B
 view: main
-generated_at: 2026-06-27T22:17:27+07:00
+generated_at: 2026-06-29T20:29:18+07:00
 non_canonical: true
 generated_mode: single
 canonical_inputs:
@@ -14,7 +14,7 @@ canonical_inputs:
 input_hashes:
   view: sha256:d8813ce52fd6
   sources: sha256:79917488741e
-  buffer: sha256:8f056210910c
+  buffer: sha256:6eb1ad717d0a
   context: sha256:5ef45bc1a5d7
   registry: sha256:323b9358779e
 ---
@@ -31,7 +31,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - view: main
 - view_path: docs/scopian/views/main/VIEW.md
-- generated_at: 2026-06-27T22:17:27+07:00
+- generated_at: 2026-06-29T20:29:18+07:00
 
 ## Selected Sources
 
@@ -58,6 +58,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 - 2026-06-27T05:25:34+07:00 DEC-20260627-0525-user-remove-demo-dataset-upload-count-NXJ5: Raw Retail demo dataset is no longer limited by a per-session demo dataset quota. MeshFlow still prevents duplicate active Raw Retail de ... (docs/scopian/views/main/buffer/decisions/DEC-20260627-0525-user-remove-demo-dataset-upload-count-NXJ5.md)
 - 2026-06-27T19:30:30+07:00 DEC-20260627-1930-user-post-refinement-workflow-and-das-E5MX: Post-refinement behavior remains within the current MeshFlow v2 demo scope: semantic preparation may run as an asynchronous backend job ... (docs/scopian/views/main/buffer/decisions/DEC-20260627-1930-user-post-refinement-workflow-and-das-E5MX.md)
 - 2026-06-27T21:48:27+07:00 DEC-20260627-2148-user-public-reset-demo-always-preserv-C36N: Public Reset Demo always preserves quota usage. The user-facing Reset Demo flow clears workspace data but never restores quota usage, in ... (docs/scopian/views/main/buffer/decisions/DEC-20260627-2148-user-public-reset-demo-always-preserv-C36N.md)
+- 2026-06-29T20:29:07+07:00 DEC-20260629-2029-user-raw-retail-ai-modeling-plan-448R: Raw Retail Demo uses a real AI modeling proposal before dbt transformation. The demo Data Flow status rail must mark AI Modeling Plan co ... (docs/scopian/views/main/buffer/decisions/DEC-20260629-2029-user-raw-retail-ai-modeling-plan-448R.md)
 
 ## Scope Checklist
 
@@ -159,6 +160,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 | ITEM-likely-out-of-scope-anti-references-upload-csv-ask-c-7d8070e8 | likely_out_of_scope | Anti-references: **"Upload CSV → ask chatbot → random chart."** The whole point is the warehouse-backed, validated path; never let the UI collapse into a to ... | PRODUCT.md#anti-references | none | not_checked_in_generated_view |
 | ITEM-likely-out-of-scope-post-api-v1-datasets-dataset-id-2d017204 | likely_out_of_scope | POST /api/v1/datasets/{dataset_id}/semantic-preparation | docs/scopian/sources/API_CONTRACT.md#post-api-v1-datasets-dataset-id-semantic-preparation | none | not_checked_in_generated_view |
 | ITEM-likely-out-of-scope-raw-retail-demo-dataset-is-no-lo-1bc97df4 | likely_out_of_scope | Raw Retail demo dataset is no longer limited by a per-session demo dataset quota. MeshFlow still prevents duplicate active Raw Retail de ... | docs/scopian/views/main/buffer/decisions/DEC-20260627-0525-user-remove-demo-dataset-upload-count-NXJ5.md | approved_buffer | not_checked_in_generated_view |
+| ITEM-likely-out-of-scope-raw-retail-demo-uses-a-real-ai-m-25c520a4 | likely_out_of_scope | Raw Retail Demo uses a real AI modeling proposal before dbt transformation. The demo Data Flow status rail must mark AI Modeling Plan co ... | docs/scopian/views/main/buffer/decisions/DEC-20260629-2029-user-raw-retail-ai-modeling-plan-448R.md | approved_buffer | not_checked_in_generated_view |
 | ITEM-decision-required-4-scopian-usage-fe55cd60 | decision_required | 4. Scopian usage | docs/scopian/sources/MAINTENANCE_RULES.md#4-scopian-usage | requires-decision | not_checked_in_generated_view |
 | ITEM-decision-required-8-preparation-ai-input-21923bff | decision_required | 8. Preparation AI input | docs/scopian/sources/AI_WORKFLOW.md#8-preparation-ai-input | none | not_checked_in_generated_view |
 | ITEM-conflict-detected-1-core-ai-principle-b39de112 | conflict_detected | 1. Core AI principle | docs/scopian/sources/AI_WORKFLOW.md#1-core-ai-principle | none | not_checked_in_generated_view |
@@ -170,7 +172,7 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 
 - likely_in_scope: 19
 - allowed_with_limits: 60
-- likely_out_of_scope: 17
+- likely_out_of_scope: 18
 - decision_required: 2
 - conflict_detected: 4
 - insufficient_evidence: 0
@@ -181,19 +183,19 @@ Regenerate with `scopian view refresh` after source or buffer changes.
 - template_only: true
 - correctness_claim: false
 - decision_required_items: 2
-- out_of_scope_items: 17
+- out_of_scope_items: 18
 
 ## Changelog Snapshot
 
-- generated_refresh: 2026-06-27T22:17:27+07:00
+- generated_refresh: 2026-06-29T20:29:18+07:00
 - selected_sources: 14
-- approved_buffer_records: 6
+- approved_buffer_records: 7
 
 ## Freshness Metadata
 
 - view: sha256:d8813ce52fd6
 - sources: sha256:79917488741e
-- buffer: sha256:8f056210910c
+- buffer: sha256:6eb1ad717d0a
 - context: sha256:5ef45bc1a5d7
 - registry: sha256:323b9358779e
 

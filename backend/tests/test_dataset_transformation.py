@@ -301,6 +301,7 @@ def patch_transform_dependencies(monkeypatch, *, fail: bool = False) -> None:
         "app.services.dbt_transformation_service.readiness_service.check_snowflake_readiness",
         lambda _config: ready_check(),
     )
+    patch_modeling_proposal(monkeypatch)
 
     def run_dbt(**_kwargs):
         if fail:
@@ -394,6 +395,77 @@ def modeling_payload() -> str:
     )
 
 
+def raw_retail_modeling_payload() -> str:
+    return json.dumps(
+        {
+            "grain": "one row per retail order line",
+            "fact_table": {
+                "name": "fact_sales",
+                "grain": "one row per retail order line",
+                "keys": [
+                    "order_id",
+                    "order_line_id",
+                    "customer_id",
+                    "product_id",
+                    "store_id",
+                ],
+                "measures": ["quantity", "revenue", "cost"],
+                "degenerate_dimensions": ["payment_method"],
+                "date_columns": ["order_date"],
+            },
+            "dimensions": [
+                {
+                    "name": "dim_customer",
+                    "key_column": "customer_id",
+                    "columns": ["customer_id", "customer_name", "customer_segment"],
+                },
+                {
+                    "name": "dim_product",
+                    "key_column": "product_id",
+                    "columns": ["product_id", "product_name", "product_category"],
+                },
+                {
+                    "name": "dim_store",
+                    "key_column": "store_id",
+                    "columns": ["store_id", "store_name", "store_region"],
+                },
+                {
+                    "name": "dim_date",
+                    "key_column": "order_date",
+                    "columns": ["order_date"],
+                },
+            ],
+            "marts": [
+                {
+                    "name": "mart_sales_performance",
+                    "grain": "one row per month",
+                    "dimensions": ["order_date_month"],
+                    "metrics": ["quantity", "revenue"],
+                },
+                {
+                    "name": "mart_product_performance",
+                    "grain": "one row per product category",
+                    "dimensions": ["product_category"],
+                    "metrics": ["quantity", "revenue"],
+                },
+                {
+                    "name": "mart_customer_segments",
+                    "grain": "one row per customer segment",
+                    "dimensions": ["customer_segment"],
+                    "metrics": ["revenue", "cost"],
+                },
+                {
+                    "name": "mart_store_performance",
+                    "grain": "one row per store region",
+                    "dimensions": ["store_region"],
+                    "metrics": ["quantity", "revenue"],
+                },
+            ],
+            "warnings": [],
+        }
+    )
+
+
 def patch_modeling_proposal(monkeypatch) -> None:
     monkeypatch.setattr(
         "app.services.modeling_proposal_service.provider_candidates",
@@ -403,7 +475,11 @@ def patch_modeling_proposal(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "app.services.modeling_proposal_service.call_gemini_provider",
-        lambda candidate, prompt, temperature: modeling_payload(),
+        lambda candidate, prompt, temperature: (
+            raw_retail_modeling_payload()
+            if '"source_type":"demo_raw_retail"' in prompt
+            else modeling_payload()
+        ),
     )
 
 
@@ -860,6 +936,11 @@ def test_data_flow_endpoint_returns_transformation_evidence(
     assert body["models"]["data_marts"]
     assert body["model_metadata"]["fact"]["name"] == "fact_sales"
     assert body["model_metadata"]["marts"][0]["related_dimensions"]
+    assert any(
+        artifact["artifact_type"] == "modeling_proposal_json"
+        and artifact["name"] == "modeling_proposal"
+        for artifact in body["artifacts"]
+    )
 
 
 def test_data_flow_endpoint_returns_raw_preview_rows(
