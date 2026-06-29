@@ -86,7 +86,7 @@ const STEPS = [
   { n: "1", title: "Upload raw data", body: "Bring a CSV or start with the curated retail input." },
   { n: "2", title: "Review schema", body: "Inspect columns before warehouse preparation starts." },
   { n: "3", title: "Plan and transform", body: "AI Modeling Plan, Staging, Intermediate, Dimensional Model, and Data Marts stay visible." },
-  { n: "4", title: "Ask from prepared marts", body: "The AI Analytics Engineer works from real query output and evidence." },
+  { n: "4", title: "Ask a business question", body: "MeshFlow selects the suitable Data Mart, runs the warehouse query, and returns chart-ready evidence." },
 ];
 
 const ARCH = [

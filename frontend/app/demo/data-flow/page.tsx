@@ -319,7 +319,21 @@ function stageState({
   }
 
   if (stage === "AI Modeling Plan") {
-    if (modelMetadata || dataset.status === "ready_for_analysis") {
+    const hasLaterTransformEvidence = Boolean(
+      dataFlow?.transformation ||
+        dataFlow?.nodes.some(
+          (candidate) =>
+            ["Staging", "Intermediate", "Dimensional Model", "Data Marts"].includes(
+              candidate.label,
+            ) && candidate.status !== "not_started",
+        ),
+    );
+    if (
+      modelMetadata ||
+      dataset.status === "ready_for_analysis" ||
+      hasLaterTransformEvidence ||
+      (transformRunning && semanticMappingsReady)
+    ) {
       return "Completed";
     }
     if (dataset.status === "transform_failed") {
@@ -329,6 +343,10 @@ function stageState({
       return semanticMappingsReady ? "Running" : "Waiting";
     }
     return "Not Started";
+  }
+
+  if (dataset.status === "ready_for_analysis") {
+    return "Completed";
   }
 
   const node = dataFlow?.nodes.find((candidate) => candidate.label === stage);
@@ -345,11 +363,10 @@ function stageState({
     if (node.status === "failed") {
       return "Failed";
     }
+    if (transformRunning) {
+      return stage === "Staging" ? "Running" : "Waiting";
+    }
     return "Not Started";
-  }
-
-  if (dataset.status === "ready_for_analysis") {
-    return "Completed";
   }
 
   if (stage === "Raw Input" || stage === "Warehouse Raw") {
@@ -1362,29 +1379,6 @@ function DataFlowContent() {
     semanticRunning: activeSemanticGenerating,
     modelMetadata,
   });
-  const transformationPlanStageState = stageState({
-    stage: "AI Modeling Plan",
-    dataset: selectedDataset,
-    dataFlow: activeDataFlow,
-    transformRunning: activeTransformRunning,
-    semanticStatus,
-    semanticMappingsReady,
-    semanticRunning: activeSemanticGenerating,
-    modelMetadata,
-  });
-  const transformationPlanBadge = statusForStageState(transformationPlanStageState);
-  const transformationPlanMessage =
-    transformationPlanStageState === "Completed"
-      ? modelMetadata?.generated_from === "modeling_proposal"
-        ? "AI modeling proposal validated. Backend-owned dbt SQL was generated from the approved plan."
-        : "Backend Raw Retail contract selected. dbt SQL is generated and validated by MeshFlow."
-      : transformationPlanStageState === "Running"
-        ? "AI is preparing the modeling plan for dbt transformation."
-        : transformationPlanStageState === "Failed"
-          ? "AI modeling plan or dbt setup failed. Review the transform message before retrying."
-          : semanticMappingsReady
-            ? "Ready to plan during Transform. Uploaded CSVs may use an AI modeling proposal; Raw Retail uses the backend contract."
-            : "Complete semantic preparation before MeshFlow prepares the AI modeling plan.";
   const dataFlowStatusByNodeType = useMemo(
     () =>
       new Map(
@@ -1773,7 +1767,15 @@ function DataFlowContent() {
         : selectedDataset?.status === "transform_failed"
           ? { status: "failed" as const, label: "Transform failed" }
           : { status: "review" as const, label: "Schema review" };
-  const visibleTabNeedsDataFlow = visibleActiveTab !== "Schema Preview";
+  const statusRailNeedsDataFlow = Boolean(
+    selectedDataset &&
+      (activeTransformRunning ||
+        selectedDataset.status === "transforming" ||
+        selectedDataset.status === "ready_for_analysis" ||
+        selectedDataset.status === "transform_failed"),
+  );
+  const visibleTabNeedsDataFlow =
+    visibleActiveTab !== "Schema Preview" || statusRailNeedsDataFlow;
 
   const loadDataFlowForDataset = useCallback(
     async (
@@ -2390,9 +2392,9 @@ function DataFlowContent() {
     setTransformMessage(null);
     setTransformNextRoute(null);
     window.requestAnimationFrame(() => {
-      statusRailRef.current?.scrollIntoView({
+      window.scrollTo({
+        top: 0,
         behavior: "smooth",
-        block: "start",
       });
     });
 
@@ -2800,7 +2802,7 @@ function DataFlowContent() {
               {activeDatasetDetail ? (
                 <>
                   {visibleActiveTab === "Schema Preview" ? (
-                    <div className="mt-4 grid gap-3 lg:grid-cols-[12rem_minmax(0,1.2fr)_minmax(0,0.95fr)]">
+                    <div className="mt-4 grid gap-3 lg:grid-cols-[12rem_minmax(0,1fr)]">
                       <div className="rounded-md border border-border bg-surface-muted px-3 py-2 lg:min-h-[6.25rem]">
                         <p className="text-xs font-medium text-ink-muted">Raw data</p>
                         <div className="mt-2 grid grid-cols-2 gap-2">
@@ -2886,36 +2888,6 @@ function DataFlowContent() {
                           </div>
                         </div>
                       ) : null}
-                      <div
-                        className={cn(
-                          "rounded-md border px-3 py-3",
-                          transformationPlanStageState === "Completed"
-                            ? "border-emerald-200 bg-emerald-50/45"
-                            : transformationPlanStageState === "Running"
-                              ? "border-blue-200 bg-blue-50"
-                              : transformationPlanStageState === "Failed"
-                                ? "border-red-200 bg-red-50"
-                                : "border-border bg-surface-muted",
-                        )}
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-ink">
-                            AI modeling plan
-                          </p>
-                          <StatusBadge
-                            status={transformationPlanBadge.status}
-                            label={transformationPlanBadge.label}
-                          />
-                        </div>
-                        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
-                          {transformationPlanMessage}
-                        </p>
-                        {modelMetadata?.generated_from ? (
-                          <p className="mt-2 font-mono text-[0.6875rem] text-ink-muted">
-                            source: {modelMetadata.generated_from.replaceAll("_", " ")}
-                          </p>
-                        ) : null}
-                      </div>
                     </div>
                   ) : null}
 
