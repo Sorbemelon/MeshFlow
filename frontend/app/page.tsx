@@ -53,7 +53,7 @@ const CAPABILITIES = [
   },
   {
     title: "AI Analytics Engineer",
-    body: "AI plans analysis from prepared marts, validates structure, and explains results from real query output.",
+    body: "AI helps prepare modeling plans, plans analysis from prepared marts, and explains real query output.",
     tint: "bg-violet-400/12",
     border: "border-violet-300/30",
     iconColor: "text-violet-300",
@@ -85,7 +85,7 @@ const CAPABILITIES = [
 const STEPS = [
   { n: "1", title: "Upload raw data", body: "Bring a CSV or start with the curated retail input." },
   { n: "2", title: "Review schema", body: "Inspect columns before warehouse preparation starts." },
-  { n: "3", title: "Transform with warehouse", body: "Staging, Intermediate, Dimensional Model, and Data Marts stay visible." },
+  { n: "3", title: "Plan and transform", body: "AI Modeling Plan, Staging, Intermediate, Dimensional Model, and Data Marts stay visible." },
   { n: "4", title: "Ask from prepared marts", body: "The AI Analytics Engineer works from real query output and evidence." },
 ];
 
@@ -149,7 +149,7 @@ const ARCH = [
   },
   {
     label: "AI Analytics Engineer",
-    desc: "Plan, validate, explain",
+    desc: "Model, plan, explain",
     borderClass: "border-primary/40",
     bgClass: "bg-primary-tint",
     textClass: "text-primary",
@@ -393,7 +393,7 @@ export default function LandingPage() {
             </ol>
             <p className="mx-auto mt-3 max-w-3xl text-center text-sm leading-relaxed text-slate-300">
               The demo path stays visible from raw input through warehouse, dbt,
-              AI planning, and dashboard evidence.
+              AI modeling, analysis planning, and dashboard evidence.
             </p>
           </div>
         </section>

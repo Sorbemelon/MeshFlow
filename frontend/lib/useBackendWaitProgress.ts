@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-export type BackendWaitContext = "backend" | "workspace" | "data_flow" | "reset";
+export type BackendWaitContext =
+  | "backend"
+  | "landing"
+  | "workspace"
+  | "data_flow"
+  | "reset";
 
 export type BackendWaitProgress = {
   elapsedSeconds: number;
@@ -75,6 +80,25 @@ export function useBackendWaitProgress(
             : visibleElapsedSeconds >= 5
               ? "The hosted backend may be resuming from sleep. Keep this tab open."
               : "MeshFlow is validating the demo session and loading workspace metadata.",
+        isColdStartLikely: visibleElapsedSeconds >= 5,
+      };
+    }
+
+    if (context === "landing") {
+      return {
+        elapsedSeconds: visibleElapsedSeconds,
+        label:
+          visibleElapsedSeconds >= 15
+            ? "Still checking the backend..."
+            : visibleElapsedSeconds >= 5
+              ? "Waking the demo backend..."
+              : "Checking backend status...",
+        detail:
+          visibleElapsedSeconds >= 15
+            ? "Render cold starts can take around a minute on hosted demos. The landing page will update once the backend responds."
+            : visibleElapsedSeconds >= 5
+              ? "The hosted backend may be resuming from sleep. Keep this tab open."
+              : "MeshFlow is checking whether the backend is available. It is not starting a demo session until you click Launch Demo.",
         isColdStartLikely: visibleElapsedSeconds >= 5,
       };
     }

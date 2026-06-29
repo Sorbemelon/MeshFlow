@@ -45,11 +45,13 @@ type LandingSessionState =
   | "backend_unavailable";
 
 type LandingBackendState = "checking" | "available" | "unavailable";
+type LandingActionState = "idle" | "starting" | "continuing";
 
 type LandingContextValue = {
   session: DemoSessionSummary | null;
   sessionState: LandingSessionState;
   backendState: LandingBackendState;
+  actionState: LandingActionState;
   error: StructuredApiError | null;
   isBusy: boolean;
   retry: () => Promise<void>;
@@ -125,8 +127,19 @@ export function LandingSessionProvider({
     useState<LandingSessionState>("checking");
   const [backendState, setBackendState] =
     useState<LandingBackendState>("checking");
+  const [actionState, setActionState] =
+    useState<LandingActionState>("idle");
   const [error, setError] = useState<StructuredApiError | null>(null);
-  const [isBusy, setIsBusy] = useState(false);
+  const isBusy = actionState !== "idle";
+
+  const navigateToDemoUpload = useCallback(() => {
+    router.push("/demo/upload");
+    window.setTimeout(() => {
+      if (window.location.pathname === "/") {
+        window.location.assign("/demo/upload");
+      }
+    }, 400);
+  }, [router]);
 
   const validateStoredSession = useCallback(async () => {
     const storedSessionId = getStoredDemoSessionId();
@@ -209,7 +222,7 @@ export function LandingSessionProvider({
   }, []);
 
   const startSession = useCallback(async () => {
-    setIsBusy(true);
+    setActionState("starting");
     setBackendState("checking");
     setError(null);
 
@@ -220,24 +233,27 @@ export function LandingSessionProvider({
       setSession(response.session);
       setSessionState("active");
       setBackendState("available");
-      router.push("/demo/upload");
+      navigateToDemoUpload();
     } catch (caught) {
       setError(asApiError(caught));
       setBackendState("unavailable");
       setSessionState("backend_unavailable");
     } finally {
-      setIsBusy(false);
+      setActionState("idle");
     }
-  }, [router]);
+  }, [navigateToDemoUpload]);
 
   const continueSession = useCallback(async () => {
     const storedSessionId = getStoredDemoSessionId();
     if (!storedSessionId) {
-      await startSession();
+      setSession(null);
+      setSessionState("no_session");
+      setBackendState("available");
+      setError(null);
       return;
     }
 
-    setIsBusy(true);
+    setActionState("continuing");
     setBackendState("checking");
     setError(null);
 
@@ -245,12 +261,12 @@ export function LandingSessionProvider({
       await warmBackend();
       const workspace = await getWorkspace(storedSessionId);
       const wasReset = isStoredDemoSessionReset(workspace.session.id);
-      if (workspace.session.status === "reset") {
+      if (workspace.session.status === "reset" || wasReset) {
         clearStoredDemoSessionReset();
         setSession(workspace.session);
         setSessionState("active");
         setBackendState("available");
-        router.push("/demo/upload");
+        navigateToDemoUpload();
         return;
       }
 
@@ -258,13 +274,7 @@ export function LandingSessionProvider({
       setSession(workspace.session);
       setSessionState("active");
       setBackendState("available");
-      router.push(
-        wasReset
-          ? "/demo/upload"
-          : workspace.dashboard.cards.length > 0
-            ? "/demo/dashboard"
-            : "/demo/upload",
-      );
+      router.push("/demo/dashboard");
     } catch (caught) {
       const apiError = asApiError(caught);
       setError(apiError);
@@ -281,9 +291,9 @@ export function LandingSessionProvider({
         setBackendState("unavailable");
       }
     } finally {
-      setIsBusy(false);
+      setActionState("idle");
     }
-  }, [router, startSession]);
+  }, [navigateToDemoUpload, router]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -310,6 +320,7 @@ export function LandingSessionProvider({
       session,
       sessionState,
       backendState,
+      actionState,
       error,
       isBusy,
       retry: validateStoredSession,
@@ -318,6 +329,7 @@ export function LandingSessionProvider({
     }),
     [
       backendState,
+      actionState,
       continueSession,
       error,
       isBusy,
@@ -376,12 +388,12 @@ export function LandingStatusBadges() {
 
 export function LandingDemoAction() {
   const {
+    actionState,
     backendState,
     continueSession,
     error,
     isBusy,
     retry,
-    session,
     sessionState,
     startSession,
   } = useLandingSession();
@@ -389,19 +401,23 @@ export function LandingDemoAction() {
   const label =
     sessionState === "resetting"
       ? "Resetting..."
-      : isBusy || sessionState === "checking"
-      ? "Checking..."
-      : sessionState === "active"
-        ? "Continue Session"
-        : sessionState === "reset_ready"
-          ? "Launch Demo"
-          : sessionState === "reset_failed"
-            ? "Retry Status"
-            : sessionState === "expired"
-              ? "Start New Session"
-              : backendState === "unavailable"
-                ? "Retry Backend"
-                : "Launch Demo";
+      : actionState === "starting"
+        ? "Starting..."
+        : actionState === "continuing"
+          ? "Opening..."
+          : sessionState === "checking"
+            ? "Checking..."
+            : sessionState === "active"
+              ? "Continue Session"
+              : sessionState === "reset_ready"
+                ? "Launch Demo"
+                : sessionState === "reset_failed"
+                  ? "Retry Status"
+                  : sessionState === "expired"
+                    ? "Start New Session"
+                    : backendState === "unavailable"
+                      ? "Retry Backend"
+                      : "Launch Demo";
 
   const helperText =
     sessionState === "resetting"
@@ -414,6 +430,14 @@ export function LandingDemoAction() {
     sessionState === "checking" ||
     sessionState === "resetting" ||
     backendState === "checking";
+  const waitContext =
+    sessionState === "resetting"
+      ? "reset"
+      : actionState === "starting"
+        ? "backend"
+        : actionState === "continuing"
+          ? "workspace"
+          : "landing";
 
   async function handleClick() {
     if (isBusy || sessionState === "checking" || sessionState === "resetting") {
@@ -431,21 +455,23 @@ export function LandingDemoAction() {
       return;
     }
 
-    if (sessionState === "active" || sessionState === "reset_ready") {
-      if (session?.status === "reset") {
-        await continueSession();
-        return;
-      }
-
+    if (sessionState === "active") {
       await continueSession();
       return;
     }
 
-    await startSession();
+    if (sessionState === "reset_ready") {
+      await continueSession();
+      return;
+    }
+
+    if (sessionState === "no_session" || sessionState === "expired") {
+      await startSession();
+    }
   }
 
   return (
-    <div>
+    <div className="relative z-30">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Button
           type="button"
@@ -475,9 +501,10 @@ export function LandingDemoAction() {
       </div>
       <BackendWaitNotice
         active={waitingForBackend}
-        context={sessionState === "resetting" ? "reset" : "backend"}
+        context={waitContext}
         tone="dark"
-        className="mt-3 max-w-xl"
+        compact
+        className="relative z-30 mt-2 max-w-lg shadow-lg shadow-slate-950/20"
       />
       {error ? (
         <p className="mt-2 max-w-xl text-xs leading-relaxed text-amber-200">

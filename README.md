@@ -6,7 +6,7 @@
 
 Warehouse-first AI analytics engineering demo workspace.
 
-Turn raw datasets into S3-backed Snowflake raw tables, dbt Data Marts, AI analysis runs, Recharts dashboard cards, insights, and inspectable evidence.
+Turn raw datasets into S3-backed Snowflake raw tables, AI modeling plans, dbt Data Marts, AI analysis runs, Recharts dashboard cards, insights, and inspectable evidence.
 
 MeshFlow is a demo project, not production SaaS. It uses real AWS S3, Snowflake, and dbt for successful data processing. It does not use DuckDB, local fake analytics execution, or fake success paths.
 
@@ -45,10 +45,10 @@ MeshFlow has passed a hosted API workflow smoke on Vercel + Render using Supabas
 MeshFlow shows how an AI analytics workspace can move from raw data to trusted dashboard output:
 
 ```text
-Dataset -> AWS S3 -> Snowflake Warehouse Raw -> dbt -> Data Marts -> AI Analytics Engineer -> Dashboard
+Dataset -> AWS S3 -> Snowflake Warehouse Raw -> Semantic Mapping -> AI Modeling Plan -> dbt -> Data Marts -> AI Analytics Engineer -> Dashboard
 ```
 
-The demo includes a raw denormalized retail dataset and a CSV upload flow. MeshFlow profiles raw columns, supports semantic column mapping, builds warehouse/dbt models, generates analysis plans, runs Snowflake SELECT queries, renders Recharts cards, and stores evidence for History and Analysis Detail.
+The demo includes a raw denormalized retail dataset and a CSV upload flow. MeshFlow profiles raw columns, supports semantic column mapping, prepares an AI-assisted modeling plan where appropriate, builds warehouse/dbt models, generates analysis plans, runs Snowflake SELECT queries, renders Recharts cards, and stores evidence for History and Analysis Detail.
 
 ## Why It Matters
 
@@ -69,6 +69,7 @@ The demo includes a raw denormalized retail dataset and a CSV upload flow. MeshF
 
 **AI analytics**
 - Semantic column mapping suggestions.
+- AI-assisted modeling plans for uploaded CSV preparation, with backend validation.
 - AI-generated analysis plans with backend validation.
 - Snowflake analytical SELECT execution.
 - Backend-owned ChartSpec generation and Recharts rendering.
@@ -87,7 +88,7 @@ The demo includes a raw denormalized retail dataset and a CSV upload flow. MeshF
 | 1 | Launch demo session | Anonymous session with visible usage limits. |
 | 2 | Add data | Use the retail demo or upload a CSV after validation/readiness checks. |
 | 3 | Review schema | Inspect raw columns, profiles, examples, and semantic mappings. |
-| 4 | Transform | Run dbt into modeled Data Marts. |
+| 4 | Transform | Review the AI Modeling Plan path and run dbt into modeled Data Marts. |
 | 5 | Ask AI Analytics Engineer | Generate a validated plan for an attached ready dataset. |
 | 6 | View dashboard result | Inspect the chart, insight, dataset, source model, and saved card. |
 | 7 | Open History / Evidence | Review SQL, ChartSpec, preview rows, provider chain, and warnings. |
@@ -116,7 +117,7 @@ How it works:
 - Supabase PostgreSQL stores metadata only; Snowflake is the analytical warehouse.
 - AWS S3 stores raw uploaded/demo files.
 - dbt builds Staging, Intermediate, Dimensional Model, and Data Marts against Snowflake.
-- Gemini and OpenAI provide structured AI output; backend validation remains the trust gate.
+- Gemini and OpenAI provide structured AI output for mappings, modeling plans, analysis plans, and insights; backend validation remains the trust gate.
 
 | Layer | Stack |
 |---|---|
@@ -131,7 +132,7 @@ How it works:
 
 ## AI Analytics Workflow
 
-Semantic preparation is column mapping only. Suggested questions are generated after Data Marts exist, using the backend-known mart catalog.
+Semantic preparation is column mapping only. The AI Modeling Plan step prepares the modeling approach before dbt when a dataset needs proposal help; backend-owned validation and SQL generation remain the trust gate. Suggested questions are generated after Data Marts exist, using the backend-known mart catalog.
 
 Provider routing:
 
@@ -150,7 +151,7 @@ Key rules:
 ## Data Flow And Modeling
 
 ```text
-Raw Input -> Warehouse Raw -> Staging -> Intermediate -> Dimensional Model -> Data Marts
+Raw Input -> Warehouse Raw -> Semantic Mapping -> AI Modeling Plan -> Staging -> Intermediate -> Dimensional Model -> Data Marts
 ```
 
 For the retail demo, MeshFlow builds a star-schema-style dimensional model:
@@ -287,7 +288,7 @@ Use a Python version compatible with dbt 1.11 for live dbt execution. The local 
 
 ## Status
 
-MeshFlow has passed local automated checks, local live smoke, and a hosted API workflow smoke on Vercel + Render with Supabase PostgreSQL metadata, AWS S3, Snowflake, dbt, Gemini, and OpenAI. The hosted validation covered Raw Retail Demo upload, Warehouse Raw loading, dbt transformation into Data Marts, AI analysis planning, Snowflake analysis SELECT execution, ChartSpec generation, insight generation, dashboard card persistence, history/detail evidence, dashboard card removal, dataset deletion, and reset cleanup with preserved quota.
+MeshFlow has passed local automated checks, local live smoke, and a hosted API workflow smoke on Vercel + Render with Supabase PostgreSQL metadata, AWS S3, Snowflake, dbt, Gemini, and OpenAI. The hosted validation covered Raw Retail Demo upload, Warehouse Raw loading, semantic preparation, dbt transformation into Data Marts, AI analysis planning, Snowflake analysis SELECT execution, ChartSpec generation, insight generation, dashboard card persistence, history/detail evidence, dashboard card removal, dataset deletion, and reset cleanup with preserved quota.
 
 Browser click-through and provider fallback were not covered in that hosted smoke. External cleanup verification used hosted cleanup statuses rather than independent credentialed S3/Snowflake inspection. Render should run with `APP_ENV=production` and `APP_DEBUG=false` for production labeling.
 

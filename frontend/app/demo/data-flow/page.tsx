@@ -15,7 +15,7 @@ import { useSearchParams } from "next/navigation";
 import { BackendWaitNotice } from "@/components/ui/BackendWaitNotice";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { StatusBadge, type Status } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
 import { cn } from "@/lib/cn";
 import { displayDatasetName } from "@/lib/datasetNames";
@@ -41,11 +41,16 @@ import {
 const PREP_STAGES = [
   "Raw Input",
   "Warehouse Raw",
+  "Semantic Preparation",
+  "AI Modeling Plan",
   "Staging",
   "Intermediate",
   "Dimensional Model",
   "Data Marts",
-];
+] as const;
+
+const DATA_FLOW_CACHE_TTL_MS = 120_000;
+const TRANSIENT_LOADING_RETRY_MS = 1_500;
 
 const TABS = [
   "Schema Preview",
@@ -131,6 +136,59 @@ type MartDimensionLink = {
 };
 
 type StageState = "Completed" | "Not Started" | "Waiting" | "Running" | "Failed";
+type PrepStage = (typeof PREP_STAGES)[number];
+
+type DataFlowCacheEntry = {
+  detail: DatasetDetailResponse | null;
+  dataFlow: DatasetDataFlowResponse | null;
+  updatedAt: number;
+};
+
+const dataFlowCache = new Map<string, DataFlowCacheEntry>();
+
+function dataFlowCacheKey(sessionId: string, datasetId: string): string {
+  return `${sessionId}:${datasetId}`;
+}
+
+function getCachedDataFlow(sessionId: string, datasetId: string): DataFlowCacheEntry | null {
+  const cached = dataFlowCache.get(dataFlowCacheKey(sessionId, datasetId));
+  if (!cached) {
+    return null;
+  }
+  if (Date.now() - cached.updatedAt > DATA_FLOW_CACHE_TTL_MS) {
+    dataFlowCache.delete(dataFlowCacheKey(sessionId, datasetId));
+    return null;
+  }
+  return cached;
+}
+
+function updateCachedDataFlow(
+  sessionId: string,
+  datasetId: string,
+  patch: Partial<Pick<DataFlowCacheEntry, "detail" | "dataFlow">>,
+) {
+  const key = dataFlowCacheKey(sessionId, datasetId);
+  const current = dataFlowCache.get(key) ?? {
+    detail: null,
+    dataFlow: null,
+    updatedAt: 0,
+  };
+  dataFlowCache.set(key, {
+    ...current,
+    ...patch,
+    updatedAt: Date.now(),
+  });
+}
+
+function clearCachedDataFlow(sessionId: string, datasetId: string) {
+  dataFlowCache.delete(dataFlowCacheKey(sessionId, datasetId));
+}
+
+function waitForTransientLoading() {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, TRANSIENT_LOADING_RETRY_MS);
+  });
+}
 
 const RAW_RETAIL_DIMENSIONS = [
   {
@@ -225,13 +283,51 @@ function datasetLabel(dataset: DatasetSummary): string {
   return displayDatasetName(dataset.name, dataset.id);
 }
 
-function stageState(
-  stage: string,
-  dataset: DatasetSummary | null,
-  dataFlow: DatasetDataFlowResponse | null,
-  transformRunning: boolean,
-): StageState {
+function stageState({
+  stage,
+  dataset,
+  dataFlow,
+  transformRunning,
+  semanticStatus,
+  semanticMappingsReady,
+  semanticRunning,
+  modelMetadata,
+}: {
+  stage: PrepStage;
+  dataset: DatasetSummary | null;
+  dataFlow: DatasetDataFlowResponse | null;
+  transformRunning: boolean;
+  semanticStatus: DatasetDetailResponse["semantic_preparation"]["status"];
+  semanticMappingsReady: boolean;
+  semanticRunning: boolean;
+  modelMetadata: DatasetModelMetadata | null;
+}): StageState {
   if (!dataset) {
+    return "Not Started";
+  }
+
+  if (stage === "Semantic Preparation") {
+    if (semanticRunning || semanticStatus === "running") {
+      return "Running";
+    }
+    if (semanticStatus === "failed") {
+      return "Failed";
+    }
+    return semanticStatus === "completed" || semanticMappingsReady
+      ? "Completed"
+      : "Not Started";
+  }
+
+  if (stage === "AI Modeling Plan") {
+    if (modelMetadata || dataset.status === "ready_for_analysis") {
+      return "Completed";
+    }
+    if (dataset.status === "transform_failed") {
+      return "Failed";
+    }
+    if (transformRunning) {
+      return semanticMappingsReady ? "Running" : "Waiting";
+    }
     return "Not Started";
   }
 
@@ -265,6 +361,22 @@ function stageState(
   }
 
   return "Not Started";
+}
+
+function statusForStageState(state: StageState): { status: Status; label: string } {
+  if (state === "Completed") {
+    return { status: "ready", label: "Completed" };
+  }
+  if (state === "Running") {
+    return { status: "running", label: "Running" };
+  }
+  if (state === "Waiting") {
+    return { status: "waiting", label: "Waiting" };
+  }
+  if (state === "Failed") {
+    return { status: "failed", label: "Failed" };
+  }
+  return { status: "waiting", label: "Not Started" };
 }
 
 function formatNullRate(value: number): string {
@@ -1132,6 +1244,7 @@ function DataFlowContent() {
   const semanticAutoRequestRef = useRef<string | null>(null);
   const selectedDatasetIdRef = useRef("");
   const refreshWorkspaceRef = useRef(refresh);
+  const statusRailRef = useRef<HTMLOListElement | null>(null);
   const starDiagramRef = useRef<HTMLDivElement | null>(null);
   const factCardRef = useRef<HTMLDivElement | null>(null);
   const dimensionCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1239,6 +1352,39 @@ function DataFlowContent() {
     [activeDataFlow?.models],
   );
   const modelMetadata: DatasetModelMetadata | null = activeDataFlow?.model_metadata ?? null;
+  const semanticStageState = stageState({
+    stage: "Semantic Preparation",
+    dataset: selectedDataset,
+    dataFlow: activeDataFlow,
+    transformRunning: activeTransformRunning,
+    semanticStatus,
+    semanticMappingsReady,
+    semanticRunning: activeSemanticGenerating,
+    modelMetadata,
+  });
+  const transformationPlanStageState = stageState({
+    stage: "AI Modeling Plan",
+    dataset: selectedDataset,
+    dataFlow: activeDataFlow,
+    transformRunning: activeTransformRunning,
+    semanticStatus,
+    semanticMappingsReady,
+    semanticRunning: activeSemanticGenerating,
+    modelMetadata,
+  });
+  const transformationPlanBadge = statusForStageState(transformationPlanStageState);
+  const transformationPlanMessage =
+    transformationPlanStageState === "Completed"
+      ? modelMetadata?.generated_from === "modeling_proposal"
+        ? "AI modeling proposal validated. Backend-owned dbt SQL was generated from the approved plan."
+        : "Backend Raw Retail contract selected. dbt SQL is generated and validated by MeshFlow."
+      : transformationPlanStageState === "Running"
+        ? "AI is preparing the modeling plan for dbt transformation."
+        : transformationPlanStageState === "Failed"
+          ? "AI modeling plan or dbt setup failed. Review the transform message before retrying."
+          : semanticMappingsReady
+            ? "Ready to plan during Transform. Uploaded CSVs may use an AI modeling proposal; Raw Retail uses the backend contract."
+            : "Complete semantic preparation before MeshFlow prepares the AI modeling plan.";
   const dataFlowStatusByNodeType = useMemo(
     () =>
       new Map(
@@ -1633,8 +1779,19 @@ function DataFlowContent() {
     async (
       datasetId: string,
       activeSessionId: string,
-      options: { refreshing?: boolean } = {},
+      options: { refreshing?: boolean; force?: boolean } = {},
     ) => {
+      const cached =
+        !options.refreshing && !options.force
+          ? getCachedDataFlow(activeSessionId, datasetId)
+          : null;
+      if (cached?.dataFlow) {
+        setDataFlow(cached.dataFlow);
+        setDataFlowState("ready");
+        setDataFlowError(null);
+        return cached.dataFlow;
+      }
+
       const requestId = dataFlowRequestRef.current + 1;
       dataFlowRequestRef.current = requestId;
       if (!options.refreshing) {
@@ -1646,7 +1803,16 @@ function DataFlowContent() {
         if (!options.refreshing) {
           await warmBackend();
         }
-        const flowResponse = await getDatasetDataFlow(datasetId, activeSessionId);
+        let flowResponse: DatasetDataFlowResponse;
+        try {
+          flowResponse = await getDatasetDataFlow(datasetId, activeSessionId);
+        } catch (firstError) {
+          if (options.refreshing) {
+            throw firstError;
+          }
+          await waitForTransientLoading();
+          flowResponse = await getDatasetDataFlow(datasetId, activeSessionId);
+        }
         if (
           dataFlowRequestRef.current !== requestId ||
           selectedDatasetIdRef.current !== datasetId
@@ -1656,12 +1822,17 @@ function DataFlowContent() {
 
         setDataFlow(flowResponse);
         setDataFlowState("ready");
+        updateCachedDataFlow(activeSessionId, datasetId, { dataFlow: flowResponse });
         return flowResponse;
       } catch (caught) {
         if (
           dataFlowRequestRef.current !== requestId ||
           selectedDatasetIdRef.current !== datasetId
         ) {
+          return null;
+        }
+
+        if (options.refreshing) {
           return null;
         }
 
@@ -1689,6 +1860,9 @@ function DataFlowContent() {
           semantic_preparation: response,
         };
         setMappingDrafts(buildMappingDrafts(nextDetail));
+        if (sessionId) {
+          updateCachedDataFlow(sessionId, datasetId, { detail: nextDetail });
+        }
         return nextDetail;
       });
       setSemanticActionMessage(response.message);
@@ -1696,12 +1870,20 @@ function DataFlowContent() {
         setSemanticActionState("idle");
       }
     },
-    [],
+    [sessionId],
   );
 
   useEffect(() => {
     if (!sessionId || !selectedDatasetId) {
-      return;
+      const timeoutId = window.setTimeout(() => {
+        setDatasetDetail(null);
+        setDataFlow(null);
+        setDataFlowState("idle");
+        setDataFlowError(null);
+        setDetailState("idle");
+        setDetailError(null);
+      }, 0);
+      return () => window.clearTimeout(timeoutId);
     }
 
     let cancelled = false;
@@ -1714,23 +1896,60 @@ function DataFlowContent() {
         return;
       }
 
-      setDetailState("loading");
+      const cached = getCachedDataFlow(activeSessionId, activeDatasetId);
+      if (cached?.detail) {
+        setDatasetDetail(cached.detail);
+        setMappingDrafts(buildMappingDrafts(cached.detail));
+        setActiveTab(
+          cached.detail.dataset.status === "ready_for_analysis"
+            ? "Dimensional Model & Data Marts"
+            : "Schema Preview",
+        );
+        setDetailState("ready");
+        setDetailError(null);
+      }
+      if (cached?.dataFlow) {
+        setDataFlow(cached.dataFlow);
+        setDataFlowState("ready");
+        setDataFlowError(null);
+      }
+      if (
+        cached?.detail &&
+        cached.detail.semantic_preparation.status !== "running" &&
+        cached.detail.dataset.status !== "transforming" &&
+        selectedDataset?.status !== "transforming"
+      ) {
+        return;
+      }
+
+      if (!cached?.detail) {
+        setDetailState("loading");
+      }
       setDetailError(null);
-      dataFlowRequestRef.current += 1;
-      setDataFlow(null);
-      setDataFlowState("idle");
-      setDataFlowError(null);
+      if (!cached?.dataFlow) {
+        dataFlowRequestRef.current += 1;
+        setDataFlow(null);
+        setDataFlowState("idle");
+        setDataFlowError(null);
+      }
       setTransformMessage(null);
       setTransformNextRoute(null);
 
       try {
-        const response = await getDataset(activeDatasetId, activeSessionId);
+        let response: DatasetDetailResponse;
+        try {
+          response = await getDataset(activeDatasetId, activeSessionId);
+        } catch {
+          await waitForTransientLoading();
+          response = await getDataset(activeDatasetId, activeSessionId);
+        }
         if (cancelled) {
           return;
         }
 
         setDatasetDetail(response);
         setMappingDrafts(buildMappingDrafts(response));
+        updateCachedDataFlow(activeSessionId, activeDatasetId, { detail: response });
         setActiveTab(
           response.dataset.status === "ready_for_analysis"
             ? "Dimensional Model & Data Marts"
@@ -1756,7 +1975,7 @@ function DataFlowContent() {
     return () => {
       cancelled = true;
     };
-  }, [selectedDatasetId, sessionId]);
+  }, [selectedDataset?.status, selectedDatasetId, sessionId]);
 
   useEffect(() => {
     if (
@@ -1835,6 +2054,7 @@ function DataFlowContent() {
 
           setDatasetDetail(nextDetail);
           setMappingDrafts(buildMappingDrafts(nextDetail));
+          updateCachedDataFlow(pollSessionId, pollDatasetId, { detail: nextDetail });
           setTransformActionDatasetId(pollDatasetId);
           setTransformActionState("idle");
           setTransformMessage(
@@ -2141,6 +2361,7 @@ function DataFlowContent() {
         };
         setDatasetDetail(nextDetail);
         setMappingDrafts(buildMappingDrafts(nextDetail));
+        updateCachedDataFlow(sessionId, selectedDatasetId, { detail: nextDetail });
       }
       setSemanticActionMessage("Schema mappings saved for dbt transformation.");
     } catch (caught) {
@@ -2168,6 +2389,12 @@ function DataFlowContent() {
     setTransformActionState("running");
     setTransformMessage(null);
     setTransformNextRoute(null);
+    window.requestAnimationFrame(() => {
+      statusRailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
 
     try {
       const response = await transformDataset(transformDatasetId, transformSessionId);
@@ -2182,8 +2409,13 @@ function DataFlowContent() {
       if (selectedDatasetIdRef.current === transformDatasetId) {
         setDatasetDetail(nextDetail);
         setMappingDrafts(buildMappingDrafts(nextDetail));
+        updateCachedDataFlow(transformSessionId, transformDatasetId, {
+          detail: nextDetail,
+        });
         setActiveTab("Dimensional Model & Data Marts");
-        void loadDataFlowForDataset(transformDatasetId, transformSessionId);
+        void loadDataFlowForDataset(transformDatasetId, transformSessionId, {
+          force: true,
+        });
       }
       setTransformActionDatasetId(transformDatasetId);
       setTransformNextRoute(response.next_route);
@@ -2224,6 +2456,7 @@ function DataFlowContent() {
 
     const response = await startDatasetDelete(dataset);
     if (response) {
+      clearCachedDataFlow(sessionId, dataset.id);
       setManualDatasetId((current) => (current === dataset.id ? "" : current));
       if (selectedDatasetId === dataset.id) {
         setDatasetDetail(null);
@@ -2415,14 +2648,19 @@ function DataFlowContent() {
             <h3 className="mb-2 text-xs font-semibold text-ink-muted">
               Preparation Status
             </h3>
-            <ol className="space-y-1.5">
+            <ol ref={statusRailRef} className="scroll-mt-4 space-y-1.5">
               {PREP_STAGES.map((stage) => {
-                const state = stageState(
+                const state = stageState({
                   stage,
-                  selectedDataset,
-                  activeDataFlow,
-                  activeTransformRunning,
-                );
+                  dataset: selectedDataset,
+                  dataFlow: activeDataFlow,
+                  transformRunning: activeTransformRunning,
+                  semanticStatus,
+                  semanticMappingsReady,
+                  semanticRunning: activeSemanticGenerating,
+                  modelMetadata,
+                });
+                const badge = statusForStageState(state);
                 const completed = state === "Completed";
                 const running = state === "Running";
                 const failed = state === "Failed";
@@ -2456,9 +2694,12 @@ function DataFlowContent() {
                     <span className="whitespace-nowrap text-sm text-ink-soft">
                       {stage}
                     </span>
-                    <span className="ml-auto whitespace-nowrap text-xs text-ink-muted">
-                      {state}
-                    </span>
+                    <StatusBadge
+                      status={badge.status}
+                      label={badge.label}
+                      showIcon={false}
+                      className="ml-auto"
+                    />
                   </li>
                 );
               })}
@@ -2559,7 +2800,7 @@ function DataFlowContent() {
               {activeDatasetDetail ? (
                 <>
                   {visibleActiveTab === "Schema Preview" ? (
-                    <div className="mt-4 grid gap-3 lg:grid-cols-[12rem_minmax(0,1fr)]">
+                    <div className="mt-4 grid gap-3 lg:grid-cols-[12rem_minmax(0,1.2fr)_minmax(0,0.95fr)]">
                       <div className="rounded-md border border-border bg-surface-muted px-3 py-2 lg:min-h-[6.25rem]">
                         <p className="text-xs font-medium text-ink-muted">Raw data</p>
                         <div className="mt-2 grid grid-cols-2 gap-2">
@@ -2595,24 +2836,8 @@ function DataFlowContent() {
                                   Semantic preparation
                                 </p>
                                 <StatusBadge
-                                  status={
-                                    activeSemanticGenerating
-                                      ? "running"
-                                      : semanticStatus === "completed"
-                                        ? "ai"
-                                        : semanticStatus === "failed"
-                                          ? "failed"
-                                          : "waiting"
-                                  }
-                                  label={
-                                    activeSemanticGenerating
-                                      ? "Generating"
-                                      : semanticStatus === "completed"
-                                        ? "Suggestions ready"
-                                        : semanticStatus === "failed"
-                                          ? "Unavailable"
-                                          : "Not started"
-                                  }
+                                  status={statusForStageState(semanticStageState).status}
+                                  label={statusForStageState(semanticStageState).label}
                                 />
                               </div>
                               <p className="mt-1 text-xs leading-relaxed text-ink-muted">
@@ -2661,6 +2886,36 @@ function DataFlowContent() {
                           </div>
                         </div>
                       ) : null}
+                      <div
+                        className={cn(
+                          "rounded-md border px-3 py-3",
+                          transformationPlanStageState === "Completed"
+                            ? "border-emerald-200 bg-emerald-50/45"
+                            : transformationPlanStageState === "Running"
+                              ? "border-blue-200 bg-blue-50"
+                              : transformationPlanStageState === "Failed"
+                                ? "border-red-200 bg-red-50"
+                                : "border-border bg-surface-muted",
+                        )}
+                      >
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-ink">
+                            AI modeling plan
+                          </p>
+                          <StatusBadge
+                            status={transformationPlanBadge.status}
+                            label={transformationPlanBadge.label}
+                          />
+                        </div>
+                        <p className="mt-1 text-xs leading-relaxed text-ink-muted">
+                          {transformationPlanMessage}
+                        </p>
+                        {modelMetadata?.generated_from ? (
+                          <p className="mt-2 font-mono text-[0.6875rem] text-ink-muted">
+                            source: {modelMetadata.generated_from.replaceAll("_", " ")}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
 

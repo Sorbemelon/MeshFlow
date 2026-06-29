@@ -22,11 +22,13 @@ export function BackendWaitNotice({
   active,
   context = "backend",
   tone = "light",
+  compact = false,
   className,
 }: {
   active: boolean;
   context?: BackendWaitContext;
   tone?: "light" | "dark";
+  compact?: boolean;
   className?: string;
 }) {
   if (!active) {
@@ -37,6 +39,7 @@ export function BackendWaitNotice({
     <ActiveBackendWaitNotice
       context={context}
       tone={tone}
+      compact={compact}
       className={className}
     />
   );
@@ -45,10 +48,12 @@ export function BackendWaitNotice({
 function ActiveBackendWaitNotice({
   context,
   tone,
+  compact,
   className,
 }: {
   context: BackendWaitContext;
   tone: "light" | "dark";
+  compact: boolean;
   className?: string;
 }) {
   const progress = useBackendWaitProgress(true, context);
@@ -58,6 +63,7 @@ function ActiveBackendWaitNotice({
     <div
       className={cn(
         "rounded-md border px-3 py-2.5 text-sm",
+        compact && "px-2.5 py-2 text-xs",
         isDark
           ? "border-white/15 bg-white/10 text-white"
           : "border-blue-200 bg-blue-50 text-blue-900",
@@ -66,8 +72,13 @@ function ActiveBackendWaitNotice({
       role="status"
       aria-live="polite"
     >
-      <div className="flex items-start gap-2.5">
-        <Spinner className={isDark ? "text-white" : "text-blue-700"} />
+      <div className={cn("flex items-start gap-2.5", compact && "gap-2")}>
+        <Spinner
+          className={cn(
+            compact && "h-3.5 w-3.5",
+            isDark ? "text-white" : "text-blue-700",
+          )}
+        />
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 font-semibold">
             <span>{progress.label}</span>
@@ -84,7 +95,7 @@ function ActiveBackendWaitNotice({
           </div>
           <p
             className={cn(
-              "mt-1 leading-5",
+              compact ? "mt-0.5 leading-4" : "mt-1 leading-5",
               isDark ? "text-white/75" : "text-blue-800/80",
             )}
           >
@@ -93,13 +104,13 @@ function ActiveBackendWaitNotice({
           {progress.isColdStartLikely ? (
             <p
               className={cn(
-                "mt-1 text-xs leading-5",
+                compact ? "mt-0.5 text-[0.7rem] leading-4" : "mt-1 text-xs leading-5",
                 isDark ? "text-white/60" : "text-blue-700/70",
               )}
             >
-              Backend wakeup can take some time. Please wait. Exact hosted
-              backend progress is not exposed to the browser, so this status is
-              estimated from wait time.
+              {compact
+                ? "Waking the hosted backend can take some time. Please wait."
+                : "Backend wakeup can take some time. Please wait. Exact hosted backend progress is not exposed to the browser, so this status is estimated from wait time."}
             </p>
           ) : null}
         </div>
