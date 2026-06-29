@@ -1475,7 +1475,7 @@ def _synthetic_data_flow(dataset: Dataset) -> tuple[list[DataFlowNodeSummary], l
     if dataset.status == "ready_for_analysis":
         statuses = ["completed"] * len(PREP_NODE_SPECS)
     elif dataset.status == "transforming":
-        statuses = ["completed", "completed", "running", "waiting", "waiting", "waiting"]
+        statuses = ["completed", "completed", "waiting", "waiting", "waiting", "waiting"]
     else:
         statuses = ["completed", "completed", "not_started", "not_started", "not_started", "not_started"]
 

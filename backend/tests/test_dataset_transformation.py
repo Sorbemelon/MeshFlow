@@ -803,6 +803,40 @@ def test_dbt_artifact_storage_does_not_persist_secrets(
     assert "secret" not in artifact_text.lower()
 
 
+def test_data_flow_endpoint_waits_for_real_layer_status_before_staging_runs(
+    client: TestClient,
+    db_session: Session,
+) -> None:
+    session_id = create_session(client)
+    dataset_id = create_dataset(
+        db_session,
+        session_id,
+        dataset_id="ds_transforming_without_nodes",
+    )
+    dataset = db_session.get(Dataset, dataset_id)
+    assert dataset is not None
+    dataset.status = "transforming"
+    db_session.add(DatasetTransformationRun(dataset=dataset, status="running"))
+    db_session.commit()
+
+    response = client.get(
+        f"/api/v1/datasets/{dataset_id}/data-flow",
+        headers={DEMO_SESSION_HEADER: session_id},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    node_statuses = {node["node_type"]: node["status"] for node in body["nodes"]}
+    assert node_statuses == {
+        "raw_input": "completed",
+        "warehouse_raw": "completed",
+        "staging": "waiting",
+        "intermediate": "waiting",
+        "dimensional_model": "waiting",
+        "data_mart": "waiting",
+    }
+
+
 def test_data_flow_endpoint_returns_transformation_evidence(
     client: TestClient,
     monkeypatch,

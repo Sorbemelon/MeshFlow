@@ -135,7 +135,13 @@ type MartDimensionLink = {
   color: string;
 };
 
-type StageState = "Completed" | "Not Started" | "Waiting" | "Running" | "Failed";
+type StageState =
+  | "Completed"
+  | "Not Started"
+  | "Not Required"
+  | "Waiting"
+  | "Running"
+  | "Failed";
 type PrepStage = (typeof PREP_STAGES)[number];
 
 type DataFlowCacheEntry = {
@@ -319,6 +325,13 @@ function stageState({
   }
 
   if (stage === "AI Modeling Plan") {
+    if (
+      dataset.source_type === "demo_raw_retail" ||
+      modelMetadata?.generated_from === "raw_retail_contract"
+    ) {
+      return "Not Required";
+    }
+
     const hasAiModelingPlanEvidence = Boolean(
       modelMetadata?.generated_from === "modeling_proposal" ||
         dataFlow?.artifacts.some(
@@ -328,7 +341,7 @@ function stageState({
     if (hasAiModelingPlanEvidence) {
       return "Completed";
     }
-    if (dataset.status === "transform_failed") {
+    if (dataFlow?.transformation?.failed_step === "modeling_proposal") {
       return "Failed";
     }
     if (transformRunning) {
@@ -355,9 +368,6 @@ function stageState({
     if (node.status === "failed") {
       return "Failed";
     }
-    if (transformRunning) {
-      return stage === "Staging" ? "Running" : "Waiting";
-    }
     return "Not Started";
   }
 
@@ -366,7 +376,7 @@ function stageState({
   }
 
   if (transformRunning) {
-    return stage === "Staging" ? "Running" : "Waiting";
+    return "Waiting";
   }
 
   return "Not Started";
@@ -375,6 +385,9 @@ function stageState({
 function statusForStageState(state: StageState): { status: Status; label: string } {
   if (state === "Completed") {
     return { status: "ready", label: "Completed" };
+  }
+  if (state === "Not Required") {
+    return { status: "waiting", label: "Not Required" };
   }
   if (state === "Running") {
     return { status: "running", label: "Running" };
