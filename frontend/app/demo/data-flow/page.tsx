@@ -12,6 +12,7 @@ import {
   type RefObject,
 } from "react";
 import { useSearchParams } from "next/navigation";
+import { BackendWaitNotice } from "@/components/ui/BackendWaitNotice";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -26,6 +27,7 @@ import {
   runSemanticPreparation,
   transformDataset,
   updateSemanticColumnMappings,
+  warmBackend,
   type DataFlowNodeStatus,
   type DatasetDataFlowResponse,
   type DatasetDetailResponse,
@@ -1130,7 +1132,6 @@ function DataFlowContent() {
   const semanticAutoRequestRef = useRef<string | null>(null);
   const selectedDatasetIdRef = useRef("");
   const refreshWorkspaceRef = useRef(refresh);
-  const reconciledWorkspaceSessionRef = useRef<string | null>(null);
   const starDiagramRef = useRef<HTMLDivElement | null>(null);
   const factCardRef = useRef<HTMLDivElement | null>(null);
   const dimensionCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1167,19 +1168,6 @@ function DataFlowContent() {
   useEffect(() => {
     refreshWorkspaceRef.current = refresh;
   }, [refresh]);
-
-  useEffect(() => {
-    if (!sessionId || reconciledWorkspaceSessionRef.current === sessionId) {
-      return;
-    }
-
-    reconciledWorkspaceSessionRef.current = sessionId;
-    const timeoutId = window.setTimeout(() => {
-      void refreshWorkspaceRef.current();
-    }, 0);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [sessionId]);
 
   const activeDatasetDetail =
     datasetDetail?.dataset.id === selectedDatasetId ? datasetDetail : null;
@@ -1655,6 +1643,9 @@ function DataFlowContent() {
       setDataFlowError(null);
 
       try {
+        if (!options.refreshing) {
+          await warmBackend();
+        }
         const flowResponse = await getDatasetDataFlow(datasetId, activeSessionId);
         if (
           dataFlowRequestRef.current !== requestId ||
@@ -2556,10 +2547,7 @@ function DataFlowContent() {
               </div>
 
               {detailState === "loading" ? (
-                <div className="mt-4 flex items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
-                  <InlineSpinner />
-                  Loading schema preview...
-                </div>
+                <BackendWaitNotice active context="data_flow" className="mt-4" />
               ) : null}
 
               {detailState === "error" ? (
@@ -2714,10 +2702,11 @@ function DataFlowContent() {
                           ) : null}
                         </div>
                         {dataFlowState === "loading" && !activeDataFlow ? (
-                          <div className="flex items-center gap-2 rounded-md border border-blue-200 bg-surface px-3 py-2 text-xs text-blue-800">
-                            <InlineSpinner />
-                            Loading Warehouse Raw preview...
-                          </div>
+                          <BackendWaitNotice
+                            active
+                            context="data_flow"
+                            className="text-xs"
+                          />
                         ) : dataFlowState === "error" && !activeDataFlow ? (
                           <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
                             {dataFlowError ?? "Warehouse Raw preview could not be loaded."}
@@ -2803,10 +2792,11 @@ function DataFlowContent() {
                         ) : null}
                       </div>
                       {dataFlowState === "loading" && !activeDataFlow ? (
-                        <div className="mt-3 flex items-center gap-2 rounded-md border border-blue-200 bg-surface px-3 py-2 text-xs text-blue-800">
-                          <InlineSpinner />
-                          Loading transformation evidence...
-                        </div>
+                        <BackendWaitNotice
+                          active
+                          context="data_flow"
+                          className="mt-3 text-xs"
+                        />
                       ) : null}
                       {dataFlowState === "error" && !activeDataFlow ? (
                         <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -3025,10 +3015,11 @@ function DataFlowContent() {
                         </div>
                       </div>
                       {dataFlowState === "loading" && !activeDataFlow ? (
-                        <div className="mt-3 flex items-center gap-2 rounded-md border border-blue-200 bg-surface px-3 py-2 text-xs text-blue-800">
-                          <InlineSpinner />
-                          Loading Dimensional Model and Data Mart evidence...
-                        </div>
+                        <BackendWaitNotice
+                          active
+                          context="data_flow"
+                          className="mt-3 text-xs"
+                        />
                       ) : null}
                       {dataFlowState === "error" && !activeDataFlow ? (
                         <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">

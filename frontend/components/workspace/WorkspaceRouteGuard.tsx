@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
+import { BackendWaitNotice } from "@/components/ui/BackendWaitNotice";
 import { Button } from "@/components/ui/Button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useWorkspaceSession } from "@/components/workspace/WorkspaceSessionProvider";
@@ -22,8 +23,8 @@ function sessionCopy(
       };
     case "backend_unavailable":
       return {
-        title: "Backend is unavailable",
-        body: "Start the FastAPI backend, then retry this workspace request.",
+        title: "Backend did not respond yet",
+        body: "The hosted backend may still be waking up. Keep this page open, then retry if it does not resume.",
       };
     case "error":
       return {
@@ -95,6 +96,11 @@ export function WorkspaceRouteGuard({
         {error?.next_action ? (
           <p className="mt-1 text-xs text-ink-muted">{error.next_action}</p>
         ) : null}
+        <BackendWaitNotice
+          active={isChecking || backendStatus === "checking"}
+          context="workspace"
+          className="mt-4 text-left"
+        />
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           <StatusBadge
             status={

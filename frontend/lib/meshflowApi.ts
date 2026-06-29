@@ -1,4 +1,9 @@
 const DEFAULT_API_BASE_URL = "http://localhost:8000/api/v1";
+const BACKEND_WAKEUP_TOTAL_TIMEOUT_MS = 90000;
+const BACKEND_WAKEUP_ATTEMPT_TIMEOUT_MS = 30000;
+const LOCAL_BACKEND_WAKEUP_TOTAL_TIMEOUT_MS = 8000;
+const LOCAL_BACKEND_WAKEUP_ATTEMPT_TIMEOUT_MS = 2500;
+const BACKEND_WAKEUP_RETRY_DELAY_MS = 2000;
 
 export const DEMO_SESSION_HEADER = "X-Demo-Session-Id";
 
@@ -626,6 +631,21 @@ function apiBaseUrl(): string {
   );
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function isLocalApiBase(): boolean {
+  try {
+    const url = new URL(apiBaseUrl());
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
 function isStructuredApiError(value: unknown): value is StructuredApiError {
   return (
     typeof value === "object" &&
@@ -677,11 +697,16 @@ async function request<T>(
       cache: "no-store",
     });
   } catch {
+    const localApi = isLocalApiBase();
     throw new MeshFlowApiError({
       error_code: "BACKEND_UNAVAILABLE",
       failed_step: "backend",
-      message: "Backend is unavailable. Start the FastAPI backend and try again.",
-      next_action: "Start the backend server, then retry.",
+      message: localApi
+        ? "MeshFlow could not reach the local backend."
+        : "MeshFlow could not reach the backend yet. The hosted demo backend may still be waking up.",
+      next_action: localApi
+        ? "Start the backend server, then retry."
+        : "Keep this page open for a moment, then retry if the request does not resume.",
       statusCode: 0,
     });
   }
@@ -705,6 +730,77 @@ async function request<T>(
   }
 
   return responseBody as T;
+}
+
+async function requestBackendHealthOnce(attemptTimeoutMs: number): Promise<void> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(
+    () => controller.abort(),
+    attemptTimeoutMs,
+  );
+
+  try {
+    const response = await fetch(`${apiBaseUrl()}/health`, {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new MeshFlowApiError({
+        error_code: "BACKEND_HEALTH_FAILED",
+        failed_step: "backend_health",
+        message: "MeshFlow backend health check did not return ready.",
+        next_action: "Wait a moment, then retry the demo action.",
+        statusCode: response.status,
+      });
+    }
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+export async function warmBackend(): Promise<void> {
+  const localApi = isLocalApiBase();
+  const totalTimeoutMs = localApi
+    ? LOCAL_BACKEND_WAKEUP_TOTAL_TIMEOUT_MS
+    : BACKEND_WAKEUP_TOTAL_TIMEOUT_MS;
+  const attemptTimeoutMs = localApi
+    ? LOCAL_BACKEND_WAKEUP_ATTEMPT_TIMEOUT_MS
+    : BACKEND_WAKEUP_ATTEMPT_TIMEOUT_MS;
+  const startedAt = Date.now();
+  let lastError: unknown = null;
+
+  while (Date.now() - startedAt < totalTimeoutMs) {
+    try {
+      await requestBackendHealthOnce(attemptTimeoutMs);
+      return;
+    } catch (caught) {
+      lastError = caught;
+      const remainingMs =
+        totalTimeoutMs - (Date.now() - startedAt);
+      if (remainingMs <= 0) {
+        break;
+      }
+      await sleep(Math.min(BACKEND_WAKEUP_RETRY_DELAY_MS, remainingMs));
+    }
+  }
+
+  if (lastError instanceof MeshFlowApiError) {
+    throw lastError;
+  }
+
+  throw new MeshFlowApiError({
+    error_code: "BACKEND_WAKEUP_TIMEOUT",
+    failed_step: "backend_wakeup",
+    message: localApi
+      ? "MeshFlow could not reach the local backend."
+      : "MeshFlow is still waiting for the hosted backend to wake up.",
+    next_action: localApi
+      ? "Start the backend server, then retry."
+      : "Render cold starts can take around a minute. Wait a moment, then retry.",
+    statusCode: 0,
+  });
 }
 
 export function createDemoSession(): Promise<DemoSessionResponse> {

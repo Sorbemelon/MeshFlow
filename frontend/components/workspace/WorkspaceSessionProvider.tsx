@@ -22,6 +22,7 @@ import {
   resetDemoSession,
   uploadDataset,
   uploadPreflight,
+  warmBackend,
   type DemoLimits,
   type DemoSessionResetResponse,
   type DemoUsage,
@@ -182,6 +183,7 @@ export function WorkspaceSessionProvider({
     setBackendStatus("checking");
 
     try {
+      await warmBackend();
       const response = await getLimits();
       setLimits(response.limits);
       setUsage(null);
@@ -199,14 +201,19 @@ export function WorkspaceSessionProvider({
   const loadWorkspace = useCallback(
     async (
       nextSessionId: string,
-      options: { silent?: boolean } = {},
+      options: { silent?: boolean; skipWarmup?: boolean; warmup?: boolean } = {},
     ): Promise<WorkspaceResponse | null> => {
       if (!options.silent) {
         setSessionStatus("checking");
         setBackendStatus("checking");
+      } else if (options.warmup) {
+        setBackendStatus("checking");
       }
 
       try {
+        if (options.warmup || (!options.silent && !options.skipWarmup)) {
+          await warmBackend();
+        }
         const [nextWorkspace, nextLimits] = await Promise.all([
           getWorkspace(nextSessionId),
           getLimits(nextSessionId),
@@ -243,12 +250,13 @@ export function WorkspaceSessionProvider({
     setResetMessage(null);
 
     try {
+      await warmBackend();
       const response = await createDemoSession();
       storeDemoSessionId(response.session.id);
       setSessionId(response.session.id);
       setLimits(response.limits);
       setUsage(response.usage);
-      return await loadWorkspace(response.session.id);
+      return await loadWorkspace(response.session.id, { skipWarmup: true });
     } catch (caught) {
       applyError(caught);
       return null;
@@ -271,6 +279,7 @@ export function WorkspaceSessionProvider({
     setSessionStatus("active");
 
     try {
+      await warmBackend();
       const response = await resetDemoSession(activeSessionId);
       markStoredDemoSessionReset(activeSessionId);
       setLimits(response.limits);
@@ -579,7 +588,7 @@ export function WorkspaceSessionProvider({
 
     routeRefreshRef.current = routeKey;
     const timeoutId = window.setTimeout(() => {
-      void loadWorkspace(sessionId, { silent: true });
+      void loadWorkspace(sessionId, { silent: true, warmup: true });
     }, 0);
 
     return () => window.clearTimeout(timeoutId);

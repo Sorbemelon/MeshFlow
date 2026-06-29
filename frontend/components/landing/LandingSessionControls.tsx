@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
+import { BackendWaitNotice } from "@/components/ui/BackendWaitNotice";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   createDemoSession,
@@ -18,9 +19,9 @@ import {
   getWorkspace,
   isSessionInvalidError,
   MeshFlowApiError,
+  warmBackend,
   type DemoSessionSummary,
   type StructuredApiError,
-  type WorkspaceResponse,
 } from "@/lib/meshflowApi";
 import {
   clearStoredDemoSessionResetFailure,
@@ -102,15 +103,6 @@ function asApiError(error: unknown): StructuredApiError {
   };
 }
 
-function hasWorkspaceContent(workspace: WorkspaceResponse): boolean {
-  return (
-    workspace.datasets.length > 0 ||
-    workspace.ready_datasets.length > 0 ||
-    workspace.dashboard.cards.length > 0 ||
-    workspace.history.analysis_runs.length > 0
-  );
-}
-
 function useLandingSession() {
   const value = useContext(LandingSessionContext);
   if (!value) {
@@ -143,6 +135,7 @@ export function LandingSessionProvider({
 
     if (!storedSessionId) {
       try {
+        await warmBackend();
         await getLimits();
         setBackendState("available");
       } catch (caught) {
@@ -179,14 +172,14 @@ export function LandingSessionProvider({
     setSessionState("checking");
 
     try {
+      await warmBackend();
       const workspace = await getWorkspace(storedSessionId);
-      const resetOrEmptyWorkspace =
+      const resetWorkspace =
         workspace.session.status === "reset" ||
-        isStoredDemoSessionReset(workspace.session.id) ||
-        !hasWorkspaceContent(workspace);
+        isStoredDemoSessionReset(workspace.session.id);
 
       setSession(workspace.session);
-      if (resetOrEmptyWorkspace) {
+      if (resetWorkspace) {
         setSessionState("reset_ready");
         setBackendState("available");
         setError(null);
@@ -221,6 +214,7 @@ export function LandingSessionProvider({
     setError(null);
 
     try {
+      await warmBackend();
       const response = await createDemoSession();
       storeDemoSessionId(response.session.id);
       setSession(response.session);
@@ -248,6 +242,7 @@ export function LandingSessionProvider({
     setError(null);
 
     try {
+      await warmBackend();
       const workspace = await getWorkspace(storedSessionId);
       const wasReset = isStoredDemoSessionReset(workspace.session.id);
       if (workspace.session.status === "reset") {
@@ -414,6 +409,11 @@ export function LandingDemoAction() {
       : sessionState === "reset_ready"
         ? "Workspace reset. Launch Demo to start again."
         : "No account needed - anonymous 3-day demo session";
+  const waitingForBackend =
+    isBusy ||
+    sessionState === "checking" ||
+    sessionState === "resetting" ||
+    backendState === "checking";
 
   async function handleClick() {
     if (isBusy || sessionState === "checking" || sessionState === "resetting") {
@@ -473,6 +473,12 @@ export function LandingDemoAction() {
           {helperText}
         </p>
       </div>
+      <BackendWaitNotice
+        active={waitingForBackend}
+        context={sessionState === "resetting" ? "reset" : "backend"}
+        tone="dark"
+        className="mt-3 max-w-xl"
+      />
       {error ? (
         <p className="mt-2 max-w-xl text-xs leading-relaxed text-amber-200">
           {error.message}
