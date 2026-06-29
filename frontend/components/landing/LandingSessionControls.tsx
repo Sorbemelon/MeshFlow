@@ -406,7 +406,7 @@ export function LandingDemoAction() {
         : actionState === "continuing"
           ? "Opening..."
           : sessionState === "checking"
-            ? "Checking..."
+            ? "Launch Demo"
             : sessionState === "active"
               ? "Continue Session"
               : sessionState === "reset_ready"
@@ -427,9 +427,7 @@ export function LandingDemoAction() {
         : "No account needed - anonymous 3-day demo session";
   const waitingForBackend =
     isBusy ||
-    sessionState === "checking" ||
-    sessionState === "resetting" ||
-    backendState === "checking";
+    sessionState === "resetting";
   const waitContext =
     sessionState === "resetting"
       ? "reset"
@@ -440,7 +438,16 @@ export function LandingDemoAction() {
           : "landing";
 
   async function handleClick() {
-    if (isBusy || sessionState === "checking" || sessionState === "resetting") {
+    if (isBusy || sessionState === "resetting") {
+      return;
+    }
+
+    if (sessionState === "checking") {
+      if (getStoredDemoSessionId()) {
+        await continueSession();
+      } else {
+        await startSession();
+      }
       return;
     }
 
@@ -478,13 +485,10 @@ export function LandingDemoAction() {
           onClick={() => void handleClick()}
           disabled={
             isBusy ||
-            sessionState === "checking" ||
             sessionState === "resetting"
           }
         >
-          {isBusy ||
-          sessionState === "checking" ||
-          sessionState === "resetting" ? (
+          {isBusy || sessionState === "resetting" ? (
             <InlineSpinner />
           ) : (
             <svg {...iconProps}>

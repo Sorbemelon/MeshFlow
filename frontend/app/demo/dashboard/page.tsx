@@ -34,6 +34,14 @@ const ip = {
 };
 
 const DASHBOARD_COMPACT_STATE_STORAGE_KEY = "meshflow.dashboardCompactCardKeys";
+const DASHBOARD_PENDING_ANALYSIS_STORAGE_KEY = "meshflow.dashboardPendingAnalysis";
+
+type PendingDashboardAnalysis = {
+  sessionId: string;
+  datasetId: string;
+  question: string;
+  startedAt: string;
+};
 
 function datasetLabel(dataset: Record<string, unknown>, index: number): string {
   const name = dataset.name;
@@ -88,6 +96,76 @@ function saveCompactDashboardCardKeys(keys: Set<string>) {
     DASHBOARD_COMPACT_STATE_STORAGE_KEY,
     JSON.stringify([...keys]),
   );
+}
+
+function loadPendingDashboardAnalysis(): PendingDashboardAnalysis | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const storedValue = window.sessionStorage.getItem(
+      DASHBOARD_PENDING_ANALYSIS_STORAGE_KEY,
+    );
+    if (!storedValue) {
+      return null;
+    }
+    const parsed = JSON.parse(storedValue) as Partial<PendingDashboardAnalysis>;
+    if (
+      typeof parsed.sessionId !== "string" ||
+      typeof parsed.datasetId !== "string" ||
+      typeof parsed.question !== "string" ||
+      typeof parsed.startedAt !== "string"
+    ) {
+      return null;
+    }
+    return {
+      sessionId: parsed.sessionId,
+      datasetId: parsed.datasetId,
+      question: parsed.question,
+      startedAt: parsed.startedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function savePendingDashboardAnalysis(pending: PendingDashboardAnalysis) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(
+    DASHBOARD_PENDING_ANALYSIS_STORAGE_KEY,
+    JSON.stringify(pending),
+  );
+}
+
+function clearPendingDashboardAnalysis() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.removeItem(DASHBOARD_PENDING_ANALYSIS_STORAGE_KEY);
+}
+
+function isPendingAnalysisMatch(
+  run: AnalysisRunSummary,
+  pending: PendingDashboardAnalysis,
+): boolean {
+  if (run.dataset_id !== pending.datasetId) {
+    return false;
+  }
+  if (run.question.trim().toLowerCase() !== pending.question.trim().toLowerCase()) {
+    return false;
+  }
+
+  const runCreatedAt = new Date(run.created_at).getTime();
+  const pendingStartedAt = new Date(pending.startedAt).getTime();
+  if (Number.isNaN(runCreatedAt) || Number.isNaN(pendingStartedAt)) {
+    return true;
+  }
+  return runCreatedAt >= pendingStartedAt - 60_000;
 }
 
 function InlineSpinner() {
@@ -506,6 +584,8 @@ export default function DashboardPage() {
     "idle" | "planning" | "generated" | "reused" | "failed"
   >("idle");
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
+  const [pendingAnalysis, setPendingAnalysis] =
+    useState<PendingDashboardAnalysis | null>(null);
   const deletingDatasetId =
     datasetDeleteOperation?.status === "deleting" ? datasetDeleteOperation.datasetId : null;
   const datasetDeleteMessage = datasetDeleteOperation?.message ?? null;
@@ -694,6 +774,135 @@ export default function DashboardPage() {
     };
   }, [loadResultGroups]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      if (!sessionId) {
+        setPendingAnalysis(null);
+        return;
+      }
+
+      const storedPending = loadPendingDashboardAnalysis();
+      if (!storedPending) {
+        return;
+      }
+
+      if (storedPending.sessionId !== sessionId) {
+        clearPendingDashboardAnalysis();
+        return;
+      }
+
+      setPendingAnalysis(storedPending);
+      setAnalysisState("planning");
+      setAnalysisMessage(
+        "Generating analysis and chart evidence. You can leave this page; MeshFlow will refresh this status when you return.",
+      );
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!sessionId || !pendingAnalysis || pendingAnalysis.sessionId !== sessionId) {
+      return;
+    }
+
+    const activeSessionId = sessionId;
+    const activePendingAnalysis = pendingAnalysis;
+    let cancelled = false;
+    let inFlight = false;
+
+    async function pollPendingAnalysis() {
+      if (inFlight) {
+        return;
+      }
+      inFlight = true;
+      try {
+        const response = await listAnalysisRuns(activeSessionId);
+        if (cancelled) {
+          return;
+        }
+
+        const matchingRun = response.analysis_runs
+          .filter((run) => isPendingAnalysisMatch(run, activePendingAnalysis))
+          .sort(
+            (left, right) =>
+              new Date(right.created_at).getTime() -
+              new Date(left.created_at).getTime(),
+          )[0];
+
+        if (!matchingRun) {
+          const elapsedMs =
+            Date.now() - new Date(activePendingAnalysis.startedAt).getTime();
+          if (elapsedMs > 12 * 60 * 1000) {
+            clearPendingDashboardAnalysis();
+            setPendingAnalysis(null);
+            setAnalysisState("failed");
+            setAnalysisMessage(
+              "MeshFlow could not confirm the analysis status. Check History, then retry only if no run appears.",
+            );
+          } else {
+            setAnalysisState("planning");
+            setAnalysisMessage(
+              "Analysis is still being prepared. MeshFlow is checking for the saved result group.",
+            );
+          }
+          return;
+        }
+
+        if (matchingRun.status === "completed" || matchingRun.status === "reused") {
+          clearPendingDashboardAnalysis();
+          setPendingAnalysis(null);
+          setAnalysisState(matchingRun.status === "reused" ? "reused" : "generated");
+          setAnalysisMessage(
+            "Analysis completed. Dashboard cards and saved result groups are refreshing.",
+          );
+          await refresh();
+          await loadResultGroups();
+          return;
+        }
+
+        if (matchingRun.status === "failed") {
+          clearPendingDashboardAnalysis();
+          setPendingAnalysis(null);
+          setAnalysisState("failed");
+          setAnalysisMessage(
+            matchingRun.error_message ??
+              "MeshFlow could not generate the analysis result.",
+          );
+          return;
+        }
+
+        setAnalysisState("planning");
+        setAnalysisMessage(
+          `Analysis is ${matchingRun.status.replaceAll("_", " ")}. MeshFlow is waiting for chart and dashboard evidence.`,
+        );
+      } catch (caught) {
+        if (!cancelled) {
+          setAnalysisState("planning");
+          setAnalysisMessage(
+            caught instanceof MeshFlowApiError
+              ? `${caught.details.message} MeshFlow will keep checking when Dashboard is open.`
+              : "MeshFlow is still checking analysis status.",
+          );
+        }
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    void pollPendingAnalysis();
+    const intervalId = window.setInterval(() => {
+      void pollPendingAnalysis();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [loadResultGroups, pendingAnalysis, refresh, sessionId]);
+
   async function handleGenerateAnalysis() {
     if (
       !sessionId ||
@@ -705,8 +914,18 @@ export default function DashboardPage() {
       return;
     }
 
+    const pending: PendingDashboardAnalysis = {
+      sessionId,
+      datasetId: activeDatasetId,
+      question: questionText.trim(),
+      startedAt: new Date().toISOString(),
+    };
+    savePendingDashboardAnalysis(pending);
+    setPendingAnalysis(pending);
     setAnalysisState("planning");
-    setAnalysisMessage("Planning, validating, and running the Snowflake analysis...");
+    setAnalysisMessage(
+      "Planning, validating, running Snowflake analysis, and generating chart evidence...",
+    );
 
     try {
       const response = await createAnalysisRun(sessionId, {
@@ -721,9 +940,13 @@ export default function DashboardPage() {
             ? "Reused a matching completed analysis run."
             : "Generated and saved to the dashboard."),
       );
+      clearPendingDashboardAnalysis();
+      setPendingAnalysis(null);
       await refresh();
       await loadResultGroups();
     } catch (caught) {
+      clearPendingDashboardAnalysis();
+      setPendingAnalysis(null);
       setAnalysisState("failed");
       setAnalysisMessage(
         caught instanceof MeshFlowApiError

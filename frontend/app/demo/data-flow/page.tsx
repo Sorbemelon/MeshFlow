@@ -319,21 +319,13 @@ function stageState({
   }
 
   if (stage === "AI Modeling Plan") {
-    const hasLaterTransformEvidence = Boolean(
-      dataFlow?.transformation ||
-        dataFlow?.nodes.some(
-          (candidate) =>
-            ["Staging", "Intermediate", "Dimensional Model", "Data Marts"].includes(
-              candidate.label,
-            ) && candidate.status !== "not_started",
+    const hasAiModelingPlanEvidence = Boolean(
+      modelMetadata?.generated_from === "modeling_proposal" ||
+        dataFlow?.artifacts.some(
+          (artifact) => artifact.artifact_type === "modeling_proposal",
         ),
     );
-    if (
-      modelMetadata ||
-      dataset.status === "ready_for_analysis" ||
-      hasLaterTransformEvidence ||
-      (transformRunning && semanticMappingsReady)
-    ) {
+    if (hasAiModelingPlanEvidence) {
       return "Completed";
     }
     if (dataset.status === "transform_failed") {
