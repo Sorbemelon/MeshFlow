@@ -120,6 +120,14 @@ function asApiError(error: unknown): StructuredApiError {
   };
 }
 
+function isRecoverableResetError(error: StructuredApiError): boolean {
+  return (
+    error.error_code === "BACKEND_UNAVAILABLE" ||
+    error.error_code === "BACKEND_WAKEUP_TIMEOUT" ||
+    error.statusCode === 0
+  );
+}
+
 export function WorkspaceSessionProvider({
   children,
 }: {
@@ -289,10 +297,15 @@ export function WorkspaceSessionProvider({
       setSessionStatus("active");
       return response;
     } catch (caught) {
-      clearStoredDemoSessionReset();
-      clearStoredDemoSessionResetPending();
       const apiError = asApiError(caught);
-      markStoredDemoSessionResetFailed(activeSessionId, apiError.message);
+      const recoverableResetError = isRecoverableResetError(apiError);
+      if (recoverableResetError) {
+        markStoredDemoSessionResetPending(activeSessionId);
+      } else {
+        clearStoredDemoSessionReset();
+        clearStoredDemoSessionResetPending();
+        markStoredDemoSessionResetFailed(activeSessionId, apiError.message);
+      }
       setError(apiError);
       setBackendStatus(
         apiError.error_code === "BACKEND_UNAVAILABLE" ? "unavailable" : "available",

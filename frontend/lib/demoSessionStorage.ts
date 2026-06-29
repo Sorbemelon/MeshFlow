@@ -101,6 +101,7 @@ export function markStoredDemoSessionResetFailed(
     DEMO_SESSION_RESET_FAILURE_STORAGE_KEY,
     JSON.stringify({ sessionId, message }),
   );
+  window.localStorage.removeItem(DEMO_SESSION_RESET_PENDING_STORAGE_KEY);
 }
 
 export function clearStoredDemoSessionResetFailure(): void {

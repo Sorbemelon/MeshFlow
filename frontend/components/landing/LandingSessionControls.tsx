@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -19,11 +20,13 @@ import {
   getWorkspace,
   isSessionInvalidError,
   MeshFlowApiError,
+  resetDemoSession,
   warmBackend,
   type DemoSessionSummary,
   type StructuredApiError,
 } from "@/lib/meshflowApi";
 import {
+  clearStoredDemoSessionResetPending,
   clearStoredDemoSessionResetFailure,
   clearStoredDemoSessionReset,
   clearStoredDemoSessionId,
@@ -31,6 +34,8 @@ import {
   getStoredDemoSessionId,
   isStoredDemoSessionReset,
   isStoredDemoSessionResetPending,
+  markStoredDemoSessionReset,
+  markStoredDemoSessionResetFailed,
   storeDemoSessionId,
 } from "@/lib/demoSessionStorage";
 
@@ -105,6 +110,14 @@ function asApiError(error: unknown): StructuredApiError {
   };
 }
 
+function isRecoverableResetError(error: StructuredApiError): boolean {
+  return (
+    error.error_code === "BACKEND_UNAVAILABLE" ||
+    error.error_code === "BACKEND_WAKEUP_TIMEOUT" ||
+    error.statusCode === 0
+  );
+}
+
 function useLandingSession() {
   const value = useContext(LandingSessionContext);
   if (!value) {
@@ -130,6 +143,7 @@ export function LandingSessionProvider({
   const [actionState, setActionState] =
     useState<LandingActionState>("idle");
   const [error, setError] = useState<StructuredApiError | null>(null);
+  const resetRecoveryInFlightRef = useRef(false);
   const isBusy = actionState !== "idle";
 
   const navigateToDemoUpload = useCallback(() => {
@@ -165,6 +179,53 @@ export function LandingSessionProvider({
       setSessionState("resetting");
       setBackendState("checking");
       setError(null);
+      if (resetRecoveryInFlightRef.current) {
+        return;
+      }
+
+      resetRecoveryInFlightRef.current = true;
+      try {
+        await warmBackend();
+        const response = await resetDemoSession(storedSessionId);
+        markStoredDemoSessionReset(storedSessionId);
+        setSession(response.session);
+        setSessionState("reset_ready");
+        setBackendState("available");
+        setError(null);
+      } catch (caught) {
+        const apiError = asApiError(caught);
+
+        if (isSessionInvalidError(caught)) {
+          clearStoredDemoSessionId();
+          setSession(null);
+          setSessionState(
+            apiError.error_code === "SESSION_EXPIRED"
+              ? "expired"
+              : "no_session",
+          );
+          setBackendState("available");
+          setError(apiError);
+        } else if (isRecoverableResetError(apiError)) {
+          setSession(null);
+          setSessionState("resetting");
+          setBackendState("checking");
+          setError(null);
+        } else {
+          clearStoredDemoSessionResetPending();
+          markStoredDemoSessionResetFailed(storedSessionId, apiError.message);
+          setSession(null);
+          setSessionState("reset_failed");
+          setBackendState("available");
+          setError({
+            ...apiError,
+            next_action:
+              apiError.next_action ??
+              "Check backend status, then retry the demo reset.",
+          });
+        }
+      } finally {
+        resetRecoveryInFlightRef.current = false;
+      }
       return;
     }
 
